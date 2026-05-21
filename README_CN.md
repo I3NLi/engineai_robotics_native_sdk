@@ -148,46 +148,36 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 #### 状态切换概览
 
+各机型状态切换逻辑不同，请参考下方各机型说明。
 
-| 当前状态     | 允许切换到状态  | 触发按键              | 说明              |
-| -------- | -------- | ----------------- | --------------- |
-| idle     | passive  | LB + RB           | 从未激活状态过渡到阻尼态    |
-| passive  | idle     | LB + START        | 回到未激活状态         |
-| passive  | pd_stand | LB + A            | 进入稳定站立控制任务      |
-| pd_stand | walk     | LB + B            | 建立稳定站立后，进入行走任务  |
-| pd_stand | dance    | LB + CROSS_X_DOWN | 建立稳定站立后，进入跳舞任务  |
-| walk     | pd_stand | LB + A            | 从行走任务回到稳定站立控制任务 |
-| walk     | dance    | LB + CROSS_X_DOWN | 从行走任务切换到跳舞任务    |
-| dance    | pd_stand | LB + A            | 从舞蹈任务回到稳定站立控制任务 |
-| dance    | walk     | LB + B            | 从舞蹈任务切换到行走任务    |
+##### pm01_edu
 
+**状态说明：**
 
-#### 状态流转示意
+| 状态 | 说明 |
+|:----:|:-----|
+| idle | 上电后的初始安全状态，控制器未激活主动运动控制。 |
+| passive | 阻尼状态，控制器施加被动阻尼力矩，机器人可被手动移动。 |
+| pd_stand | 稳定站立控制任务，通过 PD 控制维持固定直立姿态。 |
+| walk | 行走任务，机器人执行步态运动。 |
+| dance | 跳舞任务，机器人执行预设编排动作序列。 |
+| rl_lab | RL Lab 任务，为 EngineAI 开源 RL 训练框架 [engineai_amp](https://github.com/engineai-robotics/engineai_amp) 的配套部署代码，用于在真实硬件上运行 engineai_amp 训练所得的策略。 |
 
-```mermaid
-stateDiagram-v2
-    direction LR
+**状态机配置：** `assets/config/pm01_edu/task_motion/default.yaml`
 
-    idle --> passive : LB + RB
-    passive --> idle : LB + START
+##### t800
 
-    passive --> pd_stand : LB + A
+**状态说明：**
 
-    state 运动控制 {
-        direction LR
-        pd_stand --> walk : LB + B
-        pd_stand --> dance : LB + CROSS_X_DOWN
-        walk --> pd_stand : LB + A
-        dance --> walk : LB + B
-        dance --> pd_stand : LB + A
-        walk --> dance : LB + CROSS_X_DOWN
-        
-    }
+| 状态 | 说明 |
+|:----:|:-----|
+| idle | 上电后的初始安全状态，控制器未激活主动运动控制。 |
+| passive | 阻尼状态，控制器施加被动阻尼力矩，机器人可被手动移动。 |
+| pd_stand | 稳定站立控制任务，通过 PD 控制维持固定直立姿态。 |
+| walk | 行走任务，机器人执行步态运动。 |
+| dance | 跳舞任务，机器人执行预设编排动作序列。 |
 
-    note right of passive : 任意状态均可通过\nLB + RB 回到 passive
-```
-
-
+**状态机配置：** `assets/config/t800/task_motion/default.yaml`
 
 #### 全局安全机制（Emergency Fallback）
 

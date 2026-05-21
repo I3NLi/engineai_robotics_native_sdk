@@ -160,42 +160,36 @@ After executing `./run.sh` or `./run_robot.sh`, the system enters the **idle** s
 
 #### State Transition Overview
 
-| Current State | Allowed Target State | Trigger Keys | Description |
-|:-------------:|:--------------------:|:------------:|:------------|
-| idle | passive | LB + RB | Transition from inactive to damping state |
-| passive | idle | LB + START | Return to inactive state |
-| passive | pd_stand | LB + A | Enter stable standing control task |
-| pd_stand | walk | LB + B | Enter walking task after stable standing |
-| pd_stand | dance | LB + CROSS_X_DOWN | Enter dance task after stable standing |
-| walk | pd_stand | LB + A | Return to stable standing from walking |
-| walk | dance | LB + CROSS_X_DOWN | Switch from walking to dance task |
-| dance | pd_stand | LB + A | Return to stable standing from dance |
-| dance | walk | LB + B | Switch from dance to walking task |
+State transition logic varies by robot model. Refer to the per-model sections below for details.
 
-#### State Flow Diagram
+##### pm01_edu
 
-```mermaid
-stateDiagram-v2
-    direction LR
+**State Description:**
 
-    idle --> passive : LB + RB
-    passive --> idle : LB + START
+| State | Description |
+|:-----:|:------------|
+| idle | Initial safe state after power-on. No active motion control is activated. |
+| passive | Damping state. The controller applies passive damping torque; the robot can be moved manually. |
+| pd_stand | Stable standing control task. The robot maintains a fixed upright posture via PD control. |
+| walk | Walking task. The robot executes gait locomotion. |
+| dance | Dance task. The robot executes predefined choreographed motion sequences. |
+| rl_lab | RL Lab task. Deployment counterpart for the EngineAI open-source RL training framework [engineai_amp](https://github.com/engineai-robotics/engineai_amp). Executes policies trained with engineai_amp on real hardware. |
 
-    passive --> pd_stand : LB + A
+**State Machine Configuration:** `assets/config/pm01_edu/task_motion/default.yaml`
 
-    state Motion_Control {
-        direction LR
-        pd_stand --> walk : LB + B
-        pd_stand --> dance : LB + CROSS_X_DOWN
-        walk --> pd_stand : LB + A
-        dance --> walk : LB + B
-        dance --> pd_stand : LB + A
-        walk --> dance : LB + CROSS_X_DOWN
-        
-    }
+##### t800
 
-    note right of passive : Any state can return to\npassive via LB + RB
-```
+**State Description:**
+
+| State | Description |
+|:-----:|:------------|
+| idle | Initial safe state after power-on. No active motion control is activated. |
+| passive | Damping state. The controller applies passive damping torque; the robot can be moved manually. |
+| pd_stand | Stable standing control task. The robot maintains a fixed upright posture via PD control. |
+| walk | Walking task. The robot executes gait locomotion. |
+| dance | Dance task. The robot executes predefined choreographed motion sequences. |
+
+**State Machine Configuration:** `assets/config/t800/task_motion/default.yaml`
 
 #### Global Safety Mechanism (Emergency Fallback)
 
