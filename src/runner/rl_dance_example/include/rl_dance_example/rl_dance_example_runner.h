@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "basic/motion_runner.h"
@@ -30,12 +31,25 @@ class RlDanceExampleRunner : public MotionRunner {
   void TeardownContext() override;
 
  private:
+  struct TrajectoryData {
+    std::string file;
+    std::shared_ptr<const Eigen::MatrixXd> joint_pos_all;
+    std::shared_ptr<const Eigen::MatrixXd> joint_vel_all;
+    std::shared_ptr<const Eigen::MatrixXd> body_quat_w_all;
+    int max_policy_step = 0;
+  };
+
   void CalculateObservation();
   void CalculateMotorCommand();
   void SendMotorCommand();
   void initHistoryBuffers();
   void fillObsContextConstantPart();
   void updateFirstFrameYawAlignment();
+  bool LoadTrajectories();
+  void SelectTrajectory(int trajectory_index, bool reset_state);
+  void UpdateTrajectorySelectionFromGamepad();
+  void UpdateTrajectoryBlend();
+  Eigen::VectorXd GetReferenceJointPosition(int ref_step) const;
 
   Eigen::MatrixXd npyFloatToMatrixXd(const cnpy::NpyArray& npy_array, int row_index = 0);
 
@@ -47,8 +61,12 @@ class RlDanceExampleRunner : public MotionRunner {
   std::shared_ptr<const Eigen::MatrixXd> ref_joint_pos_all_;
   std::shared_ptr<const Eigen::MatrixXd> ref_joint_vel_all_;
   std::shared_ptr<const Eigen::MatrixXd> ref_body_quat_w_all_;
-  cnpy::npz_t trajectory_npz;
+  std::vector<TrajectoryData> trajectories_;
+  int active_trajectory_index_ = 0;
   int max_policy_step = 0;
+  int previous_motion_select_button_ = -1;
+  int trajectory_blend_step_ = 0;
+  int trajectory_blend_steps_ = 0;
 
   // --- Policy and observation ---
   std::unique_ptr<math::MNNModel> mlp_net_;

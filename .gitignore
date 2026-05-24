@@ -18,6 +18,11 @@
 !.vscode
 
 # Outputs
+.venv/
+.conda/
+.deps/
+CMakeFiles/
+cmake/tmp-cxx-standard.cpp
 **/build/
 **/.cache/
 **/runs/*
@@ -30,6 +35,7 @@
 **/.neptune/*
 docker/artifacts/
 *.tmp
+*.bak_*
 
 # Isaac-Sim packman
 _isaac_sim*

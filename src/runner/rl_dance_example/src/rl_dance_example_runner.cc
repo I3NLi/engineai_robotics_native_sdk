@@ -30,6 +30,8 @@
 
 #include "rl_dance_example/rl_dance_example_runner.h"
 
+#include <algorithm>
+
 #include <glog/logging.h>
 
 #include "math/rotation_matrix.h"
@@ -116,18 +118,15 @@ bool RlDanceExampleRunner::Enter() {
   // Each observation component has its own sliding-window history buffer
   initHistoryBuffers();
 
-  // --- Step 5: Load reference dance trajectory ---
-  // The .npz file contains pre-recorded motion data with keys:
+  // --- Step 5: Load reference dance trajectories ---
+  // The .npz files contain pre-recorded motion data with keys:
   //   "joint_pos"    — reference joint positions [num_frames x num_actions]
   //   "joint_vel"    — reference joint velocities [num_frames x num_actions]
   //   "body_quat_w"  — reference body quaternion (w, x, y, z) [num_frames x 4]
-  std::string traj_path =
-      common::PathJoin(common::GlobalPathManager::GetInstance().GetConfigPath(), param_->trajectory_file_npz);
-  trajectory_npz = cnpy::npz_load(traj_path);
-  ref_joint_pos_all_ = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(trajectory_npz["joint_pos"]));
-  ref_joint_vel_all_ = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(trajectory_npz["joint_vel"]));
-  ref_body_quat_w_all_ = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(trajectory_npz["body_quat_w"]));
-  max_policy_step = ref_joint_pos_all_->rows() - 1;
+  if (!LoadTrajectories()) {
+    return false;
+  }
+  SelectTrajectory(0, false);
 
   // --- Step 6: Reset runtime state ---
   is_first_time_ = true;
@@ -162,6 +161,157 @@ void RlDanceExampleRunner::fillObsContextConstantPart() {
   obs_ctx_.actions = mlp_net_action_;
 }
 
+bool RlDanceExampleRunner::LoadTrajectories() {
+  trajectories_.clear();
+
+  std::vector<std::string> trajectory_files;
+  if (param_->trajectory_files_npz && !param_->trajectory_files_npz->empty()) {
+    trajectory_files = *param_->trajectory_files_npz;
+  } else {
+    trajectory_files.push_back(param_->trajectory_file_npz);
+  }
+
+  trajectories_.reserve(trajectory_files.size());
+  for (const std::string& trajectory_file : trajectory_files) {
+    const std::string traj_path =
+        common::PathJoin(common::GlobalPathManager::GetInstance().GetConfigPath(), trajectory_file);
+    cnpy::npz_t npz = cnpy::npz_load(traj_path);
+
+    TrajectoryData trajectory;
+    trajectory.file = trajectory_file;
+    trajectory.joint_pos_all = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["joint_pos"]));
+    trajectory.joint_vel_all = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["joint_vel"]));
+    trajectory.body_quat_w_all = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["body_quat_w"]));
+    trajectory.max_policy_step = trajectory.joint_pos_all->rows() - 1;
+
+    if (trajectory.joint_pos_all->cols() != param_->num_actions ||
+        trajectory.joint_vel_all->cols() != param_->num_actions || trajectory.body_quat_w_all->cols() != 4) {
+      LOG(ERROR) << "[WbtRunner::LoadTrajectories] Invalid trajectory shape in " << trajectory_file
+                 << ": joint_pos=" << trajectory.joint_pos_all->rows() << "x" << trajectory.joint_pos_all->cols()
+                 << ", joint_vel=" << trajectory.joint_vel_all->rows() << "x" << trajectory.joint_vel_all->cols()
+                 << ", body_quat_w=" << trajectory.body_quat_w_all->rows() << "x"
+                 << trajectory.body_quat_w_all->cols() << ", expected actions=" << param_->num_actions;
+      return false;
+    }
+
+    trajectories_.push_back(std::move(trajectory));
+  }
+
+  if (trajectories_.empty()) {
+    LOG(ERROR) << "[WbtRunner::LoadTrajectories] No trajectories configured";
+    return false;
+  }
+
+  LOG(INFO) << "[WbtRunner::LoadTrajectories] Loaded " << trajectories_.size() << " trajectory file(s)";
+  return true;
+}
+
+void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_state) {
+  if (trajectory_index < 0 || trajectory_index >= static_cast<int>(trajectories_.size())) {
+    return;
+  }
+
+  Eigen::VectorXd blend_from_joint_pos;
+  Eigen::VectorXd blend_from_joint_vel;
+  Eigen::Vector4d blend_from_body_quat_w = Eigen::Vector4d::Zero();
+  if (reset_state && ref_joint_pos_all_ && ref_joint_vel_all_ && ref_body_quat_w_all_) {
+    const int old_ref_step = std::min(policy_step, max_policy_step);
+    blend_from_joint_pos = GetReferenceJointPosition(old_ref_step);
+    blend_from_joint_vel = ref_joint_vel_all_->row(old_ref_step);
+    blend_from_body_quat_w = ref_body_quat_w_all_->row(old_ref_step).transpose();
+  }
+
+  const TrajectoryData& trajectory = trajectories_[trajectory_index];
+  active_trajectory_index_ = trajectory_index;
+  ref_joint_pos_all_ = trajectory.joint_pos_all;
+  ref_joint_vel_all_ = trajectory.joint_vel_all;
+  ref_body_quat_w_all_ = trajectory.body_quat_w_all;
+  max_policy_step = trajectory.max_policy_step;
+
+  obs_ctx_.ref_joint_pos_all = ref_joint_pos_all_;
+  obs_ctx_.ref_joint_vel_all = ref_joint_vel_all_;
+  obs_ctx_.ref_body_quat_w_all = ref_body_quat_w_all_;
+
+  if (reset_state) {
+    policy_step = 0;
+    is_first_time_ = true;
+    mlp_net_action_->setZero();
+    for (Eigen::MatrixXd& buffer : observation_history_buffers_) {
+      buffer.setZero();
+    }
+    trajectory_blend_steps_ = std::max(0, param_->trajectory_switch_blend_steps);
+    trajectory_blend_step_ = trajectory_blend_steps_ > 0 ? 0 : trajectory_blend_steps_;
+    obs_ctx_.trajectory_blend_active =
+        trajectory_blend_steps_ > 0 && blend_from_joint_pos.size() == param_->num_actions;
+    obs_ctx_.trajectory_blend_alpha = obs_ctx_.trajectory_blend_active ? 0.0 : 1.0;
+    obs_ctx_.trajectory_blend_from_joint_pos = blend_from_joint_pos;
+    obs_ctx_.trajectory_blend_from_joint_vel = blend_from_joint_vel;
+    obs_ctx_.trajectory_blend_from_body_quat_w = blend_from_body_quat_w;
+  }
+
+  LOG(INFO) << "[WbtRunner::SelectTrajectory] Active trajectory " << active_trajectory_index_ << ": "
+            << trajectory.file << ", frames=" << trajectory.joint_pos_all->rows();
+}
+
+void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
+  if (trajectories_.size() <= 1) {
+    return;
+  }
+
+  const auto gamepad_info = data_store_->gamepad_info.Get();
+  if (gamepad_info->LB || gamepad_info->RB) {
+    previous_motion_select_button_ = -1;
+    return;
+  }
+
+  int selected = -1;
+  if (gamepad_info->A) {
+    selected = 0;
+  } else if (gamepad_info->B) {
+    selected = 1;
+  } else if (gamepad_info->X) {
+    selected = 2;
+  } else if (gamepad_info->Y) {
+    selected = 3;
+  }
+
+  if (selected < 0) {
+    previous_motion_select_button_ = -1;
+    return;
+  }
+
+  if (selected != previous_motion_select_button_ && selected < static_cast<int>(trajectories_.size())) {
+    SelectTrajectory(selected, true);
+  }
+  previous_motion_select_button_ = selected;
+}
+
+void RlDanceExampleRunner::UpdateTrajectoryBlend() {
+  if (!obs_ctx_.trajectory_blend_active || trajectory_blend_steps_ <= 0) {
+    return;
+  }
+
+  trajectory_blend_step_++;
+  obs_ctx_.trajectory_blend_alpha =
+      std::min(1.0, static_cast<double>(trajectory_blend_step_) / static_cast<double>(trajectory_blend_steps_));
+  if (trajectory_blend_step_ >= trajectory_blend_steps_) {
+    obs_ctx_.trajectory_blend_active = false;
+    obs_ctx_.trajectory_blend_alpha = 1.0;
+    obs_ctx_.trajectory_blend_from_joint_pos.resize(0);
+    obs_ctx_.trajectory_blend_from_joint_vel.resize(0);
+    obs_ctx_.trajectory_blend_from_body_quat_w.setZero();
+  }
+}
+
+Eigen::VectorXd RlDanceExampleRunner::GetReferenceJointPosition(int ref_step) const {
+  Eigen::VectorXd ref_joint_pos = ref_joint_pos_all_->row(ref_step);
+  if (obs_ctx_.trajectory_blend_active && obs_ctx_.trajectory_blend_from_joint_pos.size() == ref_joint_pos.size()) {
+    const double alpha = std::clamp(obs_ctx_.trajectory_blend_alpha, 0.0, 1.0);
+    ref_joint_pos = (1.0 - alpha) * obs_ctx_.trajectory_blend_from_joint_pos + alpha * ref_joint_pos;
+  }
+  return ref_joint_pos;
+}
+
 // ============================================================================
 // Main Control Loop
 // ============================================================================
@@ -174,9 +324,11 @@ void RlDanceExampleRunner::fillObsContextConstantPart() {
  * so the robot holds the final pose once the trajectory is fully played.
  */
 void RlDanceExampleRunner::Run() {
+  UpdateTrajectorySelectionFromGamepad();
   CalculateObservation();   // Assemble observation from registered components
   CalculateMotorCommand();  // Run policy inference and compute target positions
   SendMotorCommand();       // Send PD commands to motors
+  UpdateTrajectoryBlend();
 
   // Advance trajectory frame and loop back to the start.
   // policy_step = (policy_step >= max_policy_step) ? 0 : policy_step + 1;
@@ -315,7 +467,7 @@ void RlDanceExampleRunner::CalculateMotorCommand() {
   q_des_ = *default_joint_q_;
   if (param_->resident_control) {
     const int ref_step = std::min(policy_step, max_policy_step);
-    const Eigen::VectorXd ref_joint_pos = ref_joint_pos_all_->row(ref_step);
+    const Eigen::VectorXd ref_joint_pos = GetReferenceJointPosition(ref_step);
     const Eigen::VectorXd scaled_action = mlp_net_action_->cwiseProduct(action_scale_);
     q_des_(*policy2deploy_joint_idx_) = ref_joint_pos + scaled_action;
   } else {

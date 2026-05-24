@@ -96,6 +96,7 @@ class VirtualGamepadWidget(QWidget):
         self.gamepad_keys = GamepadKeys()
         self.is_sending = False
         self.should_send_macro_count = 0
+        self.motion_switch_pulse_queue = []
         # set keyboard shortcuts
         self.shortcuts = {
             'A': Qt.Key.Key_J,
@@ -130,6 +131,12 @@ class VirtualGamepadWidget(QWidget):
             "walk: [LB, B]": ("LB", "B"),
             "dance: [RB, B]": ("RB", "B")
         }
+        self.motion_switches = {
+            "Punch": ("A",),
+            "Kick Turn": ("B",),
+            "Riot Combo": ("X",),
+            "Victory": ("Y",),
+        }
 
         self.init_ui()
 
@@ -161,6 +168,7 @@ class VirtualGamepadWidget(QWidget):
         self.setup_stick_shortcuts()
         self.setup_sliders()
         self.setup_macro_buttons()
+        self.setup_motion_switch_buttons()
         # create timer
         self.timer = QTimer()
         self.timer.timeout.connect(self.send_state)
@@ -358,6 +366,11 @@ class VirtualGamepadWidget(QWidget):
         macro_group.setLayout(self.macro_layout)
         main_layout.addWidget(macro_group)
 
+        motion_group = QGroupBox("Dance Motion Switch")
+        self.motion_switch_layout = QHBoxLayout()
+        motion_group.setLayout(self.motion_switch_layout)
+        main_layout.addWidget(motion_group)
+
         # self.setMinimumSize(1200, 800)
 
     def setup_macro_buttons(self):
@@ -397,6 +410,19 @@ class VirtualGamepadWidget(QWidget):
         # Add stretch to the end of the last row.
         if current_row_layout and button_count_in_current_row < MAX_BUTTONS_PER_ROW:
             current_row_layout.addStretch()
+
+    def setup_motion_switch_buttons(self):
+        while self.motion_switch_layout.count():
+            item = self.motion_switch_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        for name, combination in self.motion_switches.items():
+            button = MacroButton(name, combination, self)
+            button.clicked.connect(
+                lambda clicked, btn=button: self.handle_motion_switch_button_pressed(clicked, btn))
+            self.motion_switch_layout.addWidget(button)
+        self.motion_switch_layout.addStretch()
 
     def on_lcm_status_changed(self, connected):
         if connected:
@@ -490,6 +516,7 @@ class VirtualGamepadWidget(QWidget):
     def discard_pending_inputs(self):
         self.gamepad_keys = GamepadKeys()
         self.should_send_macro_count = 0
+        self.motion_switch_pulse_queue = []
         self.shortcut_states = {name: False for name in self.shortcuts}
 
         for button, _ in self.button_map.values():
@@ -535,6 +562,14 @@ class VirtualGamepadWidget(QWidget):
         self.should_send_macro_count = MACRO_BUTTON_SENDING_COUNT
         self.marcro_button_combination = macro_button.button_combination
 
+    def handle_motion_switch_button_pressed(self, clicked, macro_button: MacroButton):
+        if not self.is_sending:
+            return
+        release_frames = [tuple()] * 3
+        press_frames = [macro_button.button_combination] * 10
+        trailing_release_frames = [tuple()] * 2
+        self.motion_switch_pulse_queue = release_frames + press_frames + trailing_release_frames
+
     def button_state_changed(self, index, pressed):
         if not self.is_sending:
             return
@@ -554,7 +589,10 @@ class VirtualGamepadWidget(QWidget):
             self.status_light.set_active(False)
             return
 
-        if self.should_send_macro_count > 0:
+        if self.motion_switch_pulse_queue:
+            gamepad_keys = self.convert_button_combination_to_gamepad_keys(
+                self.motion_switch_pulse_queue.pop(0))
+        elif self.should_send_macro_count > 0:
             self.should_send_macro_count -= 1
             # Create a fresh gamepad state for macro button playback.
             gamepad_keys = self.convert_button_combination_to_gamepad_keys(

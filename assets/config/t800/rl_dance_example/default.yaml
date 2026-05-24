@@ -1,5 +1,13 @@
 policy_file: "rl_dance_example/policies/policy.mnn"
-trajectory_file_npz: "rl_dance_example/trajectories/victory_50hz.npz"
+trajectory_file_npz: "rl_dance_example/trajectories/Punch_Swing_L_50hz.npz"
+trajectory_files_npz:
+  [
+    "rl_dance_example/trajectories/Punch_Swing_L_50hz.npz",
+    "rl_dance_example/trajectories/kick_Turn_50hz.npz",
+    "rl_dance_example/trajectories/riot_combo_50hz.npz",
+    "rl_dance_example/trajectories/victory_50hz.npz",
+  ]
+trajectory_switch_blend_steps: 25
 default_joint_pos:
   [
     -0.06,
@@ -116,12 +124,13 @@ observation_names:
   [
     "command",
     "motion_anchor_ori_b",
+    "base_gravity",
     "base_ang_vel",
     "joint_pos",
     "joint_vel",
     "actions",
   ]
-observation_history_lengths: [1, 1, 1, 1, 1, 1]
+observation_history_lengths: [1, 1, 1, 1, 1, 1, 1]
 action_scale:
   [
     0.5,

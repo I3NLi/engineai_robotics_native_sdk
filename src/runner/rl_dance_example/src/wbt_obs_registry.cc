@@ -6,6 +6,8 @@
 
 #include "rl_dance_example/wbt_obs_registry.h"
 
+#include <algorithm>
+
 #include <glog/logging.h>
 #include <functional>
 #include <unordered_map>
@@ -48,6 +50,13 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
           int r = ctx.ref_joint_pos_all->rows();
           int step = r > 0 ? std::min(ctx.policy_step + ctx.future_cmd_step, r - 1) : 0;
           Eigen::VectorXd ref_pos = ctx.ref_joint_pos_all->row(step);
+          Eigen::VectorXd ref_vel = ctx.ref_joint_vel_all->row(step);
+          if (ctx.trajectory_blend_active && ctx.trajectory_blend_from_joint_pos.size() == ref_pos.size() &&
+              ctx.trajectory_blend_from_joint_vel.size() == ref_vel.size()) {
+            const double alpha = std::clamp(ctx.trajectory_blend_alpha, 0.0, 1.0);
+            ref_pos = (1.0 - alpha) * ctx.trajectory_blend_from_joint_pos + alpha * ref_pos;
+            ref_vel = (1.0 - alpha) * ctx.trajectory_blend_from_joint_vel + alpha * ref_vel;
+          }
           if (ctx.data_store && ctx.soft_joint_pos_limit && ctx.policy2deploy_joint_idx &&
               ctx.soft_joint_pos_limit->size() == ref_pos.size()) {
             int n = ctx.data_store->model_param->num_total_joints;
@@ -60,7 +69,6 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
             Eigen::VectorXd soft_lower = lower_policy.cwiseProduct(*ctx.soft_joint_pos_limit);
             ref_pos = ref_pos.cwiseMax(soft_lower).cwiseMin(soft_upper);
           }
-          Eigen::VectorXd ref_vel = ctx.ref_joint_vel_all->row(step);
           Eigen::VectorXd cmd(ref_pos.size() + ref_vel.size());
           cmd << ref_pos, ref_vel;
           return cmd;
@@ -78,6 +86,14 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
           int step = std::min(ctx.policy_step, r - 1);
           Eigen::Quaterniond ref_quat_w((*ctx.ref_body_quat_w_all)(step, 0), (*ctx.ref_body_quat_w_all)(step, 1),
                                         (*ctx.ref_body_quat_w_all)(step, 2), (*ctx.ref_body_quat_w_all)(step, 3));
+          if (ctx.trajectory_blend_active && ctx.trajectory_blend_from_body_quat_w.norm() > 1e-6) {
+            Eigen::Quaterniond from_quat_w(ctx.trajectory_blend_from_body_quat_w(0),
+                                           ctx.trajectory_blend_from_body_quat_w(1),
+                                           ctx.trajectory_blend_from_body_quat_w(2),
+                                           ctx.trajectory_blend_from_body_quat_w(3));
+            const double alpha = std::clamp(ctx.trajectory_blend_alpha, 0.0, 1.0);
+            ref_quat_w = from_quat_w.normalized().slerp(alpha, ref_quat_w.normalized());
+          }
           Eigen::Matrix3d ref_anchor_ori_rot_w = math::RotationMatrixd(ref_quat_w).matrix();
 
           Eigen::Matrix3d R_real;
@@ -164,6 +180,8 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
           return projected_gravity;
         },
     };
+
+    registry["base_gravity"] = registry["projected_gravity"];
   }
 
   return registry;

@@ -35,6 +35,12 @@ struct ObsContext {
   std::shared_ptr<const Eigen::VectorXd> soft_joint_pos_limit = nullptr;
 
   int future_cmd_step = 0;
+
+  bool trajectory_blend_active = false;
+  double trajectory_blend_alpha = 1.0;
+  Eigen::VectorXd trajectory_blend_from_joint_pos;
+  Eigen::VectorXd trajectory_blend_from_joint_vel;
+  Eigen::Vector4d trajectory_blend_from_body_quat_w = Eigen::Vector4d::Zero();
 };
 
 /// Single-step observation dimension (without history). Some observations depend on num_actions.
