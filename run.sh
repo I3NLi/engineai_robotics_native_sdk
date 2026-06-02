@@ -22,6 +22,9 @@ fi
 
 echo "[INFO] Exports the environment variables:"
 cd $source_dir
+if [ -f /opt/ros/humble/setup.bash ]; then
+    source /opt/ros/humble/setup.bash
+fi
 source ./env.sh
 
 echo "[INFO] Start the crash monitor:"
