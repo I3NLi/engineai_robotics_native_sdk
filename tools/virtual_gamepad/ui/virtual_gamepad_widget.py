@@ -133,8 +133,18 @@ class VirtualGamepadWidget(QWidget):
         }
         self.motion_switches = {
             "Punch": ("A",),
-            "Kick Turn": ("B",),
-            "Riot Combo": ("X",),
+            "Kick Turn 0.5": ("B",),
+            "Kick Turn 0.6": ("B", "CROSS_X_UP"),
+            "Kick Turn 0.7": ("B", "CROSS_Y_LEFT"),
+            "Kick Turn 0.8": ("B", "CROSS_Y_RIGHT"),
+            "Kick Turn 0.9": ("B", "CROSS_X_DOWN"),
+            "Kick Turn 1.0": ("B", "START"),
+            "Riot Combo 0.5": ("X",),
+            "Riot Combo 0.6": ("X", "CROSS_X_UP"),
+            "Riot Combo 0.7": ("X", "CROSS_Y_LEFT"),
+            "Riot Combo 0.8": ("X", "CROSS_Y_RIGHT"),
+            "Riot Combo 0.9": ("X", "CROSS_X_DOWN"),
+            "Riot Combo 1.0": ("X", "START"),
             "Victory": ("Y",),
         }
 
