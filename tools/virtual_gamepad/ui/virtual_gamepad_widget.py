@@ -131,22 +131,38 @@ class VirtualGamepadWidget(QWidget):
             "walk: [LB, B]": ("LB", "B"),
             "dance: [RB, B]": ("RB", "B")
         }
-        self.motion_switches = {
-            "Punch": ("A",),
-            "Kick Turn 0.5": ("B",),
-            "Kick Turn 0.6": ("B", "CROSS_X_UP"),
-            "Kick Turn 0.7": ("B", "CROSS_Y_LEFT"),
-            "Kick Turn 0.8": ("B", "CROSS_Y_RIGHT"),
-            "Kick Turn 0.9": ("B", "CROSS_X_DOWN"),
-            "Kick Turn 1.0": ("B", "START"),
-            "Riot Combo 0.5": ("X",),
-            "Riot Combo 0.6": ("X", "CROSS_X_UP"),
-            "Riot Combo 0.7": ("X", "CROSS_Y_LEFT"),
-            "Riot Combo 0.8": ("X", "CROSS_Y_RIGHT"),
-            "Riot Combo 0.9": ("X", "CROSS_X_DOWN"),
-            "Riot Combo 1.0": ("X", "START"),
-            "Victory": ("Y",),
-        }
+        self.motion_switch_groups = (
+            (
+                "Controls",
+                (
+                    ("Pause Toggle", ("BACK",)),
+                    ("Punch", ("A",)),
+                    ("Victory", ("Y",)),
+                ),
+            ),
+            (
+                "Kick Turn",
+                (
+                    ("0.5", ("B",)),
+                    ("0.6", ("B", "CROSS_X_UP")),
+                    ("0.7", ("B", "CROSS_Y_LEFT")),
+                    ("0.8", ("B", "CROSS_Y_RIGHT")),
+                    ("0.9", ("B", "CROSS_X_DOWN")),
+                    ("1.0", ("B", "START")),
+                ),
+            ),
+            (
+                "Riot Combo",
+                (
+                    ("0.5", ("X",)),
+                    ("0.6", ("X", "CROSS_X_UP")),
+                    ("0.7", ("X", "CROSS_Y_LEFT")),
+                    ("0.8", ("X", "CROSS_Y_RIGHT")),
+                    ("0.9", ("X", "CROSS_X_DOWN")),
+                    ("1.0", ("X", "START")),
+                ),
+            ),
+        )
 
         self.init_ui()
 
@@ -377,7 +393,7 @@ class VirtualGamepadWidget(QWidget):
         main_layout.addWidget(macro_group)
 
         motion_group = QGroupBox("Dance Motion Switch")
-        self.motion_switch_layout = QHBoxLayout()
+        self.motion_switch_layout = QVBoxLayout()
         motion_group.setLayout(self.motion_switch_layout)
         main_layout.addWidget(motion_group)
 
@@ -427,11 +443,17 @@ class VirtualGamepadWidget(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-        for name, combination in self.motion_switches.items():
-            button = MacroButton(name, combination, self)
-            button.clicked.connect(
-                lambda clicked, btn=button: self.handle_motion_switch_button_pressed(clicked, btn))
-            self.motion_switch_layout.addWidget(button)
+        for group_name, switches in self.motion_switch_groups:
+            group = QGroupBox(group_name)
+            group_layout = QHBoxLayout(group)
+            for name, combination in switches:
+                button = MacroButton(name, combination, self)
+                button.clicked.connect(
+                    lambda clicked, btn=button: self.handle_motion_switch_button_pressed(clicked, btn))
+                group_layout.addWidget(button)
+            group_layout.addStretch()
+            self.motion_switch_layout.addWidget(group)
+        self.motion_switch_layout.addStretch()
         self.motion_switch_layout.addStretch()
 
     def on_lcm_status_changed(self, connected):

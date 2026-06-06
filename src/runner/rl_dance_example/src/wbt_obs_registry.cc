@@ -57,6 +57,9 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
             ref_pos = (1.0 - alpha) * ctx.trajectory_blend_from_joint_pos + alpha * ref_pos;
             ref_vel = (1.0 - alpha) * ctx.trajectory_blend_from_joint_vel + alpha * ref_vel;
           }
+          if (ctx.reference_velocity_zero) {
+            ref_vel.setZero();
+          }
           if (ctx.data_store && ctx.soft_joint_pos_limit && ctx.policy2deploy_joint_idx &&
               ctx.soft_joint_pos_limit->size() == ref_pos.size()) {
             int n = ctx.data_store->model_param->num_total_joints;

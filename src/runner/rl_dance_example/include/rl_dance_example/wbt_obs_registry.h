@@ -20,6 +20,7 @@ struct ObsContext {
   std::shared_ptr<const Eigen::MatrixXd> ref_joint_vel_all = nullptr;
   std::shared_ptr<const Eigen::MatrixXd> ref_body_quat_w_all = nullptr;
   int policy_step = 0;
+  bool reference_velocity_zero = false;
 
   int num_actions = 0;
   std::shared_ptr<Eigen::VectorXd> default_joint_q = nullptr;

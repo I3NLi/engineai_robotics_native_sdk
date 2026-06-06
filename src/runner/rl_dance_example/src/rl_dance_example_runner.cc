@@ -129,6 +129,8 @@ bool RlDanceExampleRunner::Enter() {
   is_first_time_ = true;
   policy_step = 0;
   policy_phase_ = 0.0;
+  previous_pause_button_ = false;
+  trajectory_paused_ = false;
   GetMutableOutput().Reset();
 
   // Pre-fill observation context fields that remain constant throughout execution
@@ -257,6 +259,8 @@ void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_sta
     policy_step = 0;
     policy_phase_ = 0.0;
     is_first_time_ = true;
+    trajectory_paused_ = false;
+    obs_ctx_.reference_velocity_zero = false;
     mlp_net_action_->setZero();
     for (Eigen::MatrixXd& buffer : observation_history_buffers_) {
       buffer.setZero();
@@ -282,6 +286,19 @@ void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
   }
 
   const auto gamepad_info = data_store_->gamepad_info.Get();
+  const bool pause_pressed = gamepad_info->BACK && !gamepad_info->LB && !gamepad_info->RB;
+  if (pause_pressed && !previous_pause_button_) {
+    trajectory_paused_ = !trajectory_paused_;
+    obs_ctx_.reference_velocity_zero = trajectory_paused_;
+    LOG(INFO) << "[WbtRunner::Pause] Trajectory pause " << (trajectory_paused_ ? "enabled" : "disabled")
+              << " at step " << policy_step;
+  }
+  previous_pause_button_ = pause_pressed;
+  if (pause_pressed) {
+    previous_motion_select_button_ = -1;
+    return;
+  }
+
   if (gamepad_info->LB || gamepad_info->RB) {
     previous_motion_select_button_ = -1;
     return;
@@ -381,15 +398,20 @@ bool RlDanceExampleRunner::LoadPolicy(const std::string& policy_file) {
  */
 void RlDanceExampleRunner::Run() {
   UpdateTrajectorySelectionFromGamepad();
+  obs_ctx_.reference_velocity_zero = trajectory_paused_;
   CalculateObservation();   // Assemble observation from registered components
   CalculateMotorCommand();  // Run policy inference and compute target positions
   SendMotorCommand();       // Send PD commands to motors
-  UpdateTrajectoryBlend();
+  if (!trajectory_paused_) {
+    UpdateTrajectoryBlend();
+  }
 
   // Advance trajectory frame and loop back to the start.
   // policy_step = (policy_step >= max_policy_step) ? 0 : policy_step + 1;
-  policy_phase_ = std::min(policy_phase_ + active_trajectory_speed_scale_, static_cast<double>(max_policy_step));
-  policy_step = std::min(static_cast<int>(std::floor(policy_phase_)), max_policy_step);
+  if (!trajectory_paused_) {
+    policy_phase_ = std::min(policy_phase_ + active_trajectory_speed_scale_, static_cast<double>(max_policy_step));
+    policy_step = std::min(static_cast<int>(std::floor(policy_phase_)), max_policy_step);
+  }
 }
 
 // ============================================================================
