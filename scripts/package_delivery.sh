@@ -66,6 +66,7 @@ write_manifest() {
     printf -- '- Compiled SDK binaries: `build/_install/bin`, `build/_install/lib`\n'
     printf -- '- MuJoCo runtime binary: `simulation/mujoco/build/engineai_robotics_simulation_mujoco`\n'
     printf -- '- T800 policy assets: `assets/config/t800/rl_dance_example/policies`\n'
+    printf -- '- Container helper scripts: `docker/`\n'
     printf -- '- Virtual gamepad: `tools/virtual_gamepad`\n\n'
     printf '## Source exclusion policy\n\n'
     printf 'The delivery branch intentionally excludes C/C++ source trees and build definitions, including '
@@ -92,7 +93,6 @@ verify_no_cpp_sources() {
     "./cmake"
     "./CMakeLists.txt"
     "./build.sh"
-    "./docker"
   )
 
   for path in "${forbidden_paths[@]}"; do
@@ -145,6 +145,7 @@ cp -a "${source_dir}/simulation/mujoco/build/src/lcm_interface/libsrc_lcm_interf
   "${delivery_dir}/simulation/mujoco/build/src/lcm_interface/"
 
 copy_dir "${source_dir}/assets" "${delivery_dir}/assets"
+copy_dir "${source_dir}/docker" "${delivery_dir}/docker"
 copy_dir "${source_dir}/docs" "${delivery_dir}/docs"
 copy_dir "${source_dir}/scripts" "${delivery_dir}/scripts"
 copy_dir "${source_dir}/tools/virtual_gamepad" "${delivery_dir}/tools/virtual_gamepad"
