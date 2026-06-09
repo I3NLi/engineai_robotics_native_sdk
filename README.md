@@ -173,6 +173,8 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 If there is no physical F710 receiver attached, the SDK may print a gamepad initialization retry message. This is expected when using the virtual gamepad.
 
+The T800 delivery dance task uses the policy exported from `model_84000.pt` and the bundled NPZ trajectories. Trajectory switching does not use warmup/blend. After a dance motion finishes, the robot automatically returns to `pd_stand` instead of entering `walk`.
+
 #### System Startup
 
 After executing `./run.sh` or `./run_robot.sh`, the system enters the **idle** state by default. `idle` is the initial safe state after the robot is powered on — the controller does not activate active motion control.

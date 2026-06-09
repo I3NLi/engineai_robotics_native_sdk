@@ -161,6 +161,8 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 如果没有连接实体 F710 接收器，SDK 可能会打印手柄初始化重试信息；使用虚拟手柄时这是正常现象。
 
+T800 交付版的跳舞任务使用 `model_84000.pt` 导出的策略和随包 NPZ 轨迹，轨迹切换不启用 warmup/blend。跳舞动作结束后会自动回到 `pd_stand`，不会自动进入 `walk`。
+
 #### 系统启动
 
 执行 `./run.sh` 或 `./run_robot.sh` 后，系统默认进入 **idle** 状态。`idle` 是机器人上电后的初始安全状态，控制器未激活主动运动控制。
