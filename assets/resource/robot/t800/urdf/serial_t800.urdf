@@ -122,7 +122,7 @@
     <parent link="LINK_HIP_YAW_L" />
     <child link="LINK_KNEE_PITCH_L" />
     <axis xyz="0.0 1.0 0.0" />
-    <limit lower="0.0" upper="2.355" effort="415" velocity="25.96" />
+    <limit lower="-0.261667" upper="2.355" effort="415" velocity="25.96" />
   </joint>
   <link name="LINK_ANKLE_PITCH_L">
     <inertial>
@@ -292,7 +292,7 @@
     <parent link="LINK_HIP_YAW_R" />
     <child link="LINK_KNEE_PITCH_R" />
     <axis xyz="0.0 1.0 0.0" />
-    <limit lower="0.0" upper="2.355" effort="415" velocity="25.96" />
+    <limit lower="-0.261667" upper="2.355" effort="415" velocity="25.96" />
   </joint>
   <link name="LINK_ANKLE_PITCH_R">
     <inertial>
