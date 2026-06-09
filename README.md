@@ -154,6 +154,25 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 ![Virtual Gamepad Interface](docs/virtual_gamepad.png)
 
+##### Delivery Branch Runtime
+
+The `delivery` branch is generated for runtime delivery only. It contains compiled binaries, runtime assets, scripts, and documentation, but intentionally excludes C/C++ source code and installed headers.
+
+For a T800 simulation runtime from the `delivery` branch, start the components in this order:
+
+```bash
+# Terminal 1: start MuJoCo
+./scripts/run_mujoco.sh t800
+
+# Terminal 2: start the SDK executor
+./run.sh t800
+
+# Terminal 3: start the virtual gamepad UI
+python3 tools/virtual_gamepad/virtual_gamepad.py
+```
+
+If there is no physical F710 receiver attached, the SDK may print a gamepad initialization retry message. This is expected when using the virtual gamepad.
+
 #### System Startup
 
 After executing `./run.sh` or `./run_robot.sh`, the system enters the **idle** state by default. `idle` is the initial safe state after the robot is powered on — the controller does not activate active motion control.

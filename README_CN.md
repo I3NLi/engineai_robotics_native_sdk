@@ -142,6 +142,25 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 ![虚拟手柄界面](docs/virtual_gamepad.png)
 
+##### Delivery 分支运行
+
+`delivery` 分支用于交付运行，不需要重新编译。该分支只包含已编译二进制、运行资产、脚本和文档，不包含 C/C++ 源码和已安装头文件。
+
+从 `delivery` 分支运行 T800 仿真时，按以下顺序启动：
+
+```bash
+# 终端 1：启动 MuJoCo
+./scripts/run_mujoco.sh t800
+
+# 终端 2：启动 SDK executor
+./run.sh t800
+
+# 终端 3：启动虚拟手柄 UI
+python3 tools/virtual_gamepad/virtual_gamepad.py
+```
+
+如果没有连接实体 F710 接收器，SDK 可能会打印手柄初始化重试信息；使用虚拟手柄时这是正常现象。
+
 #### 系统启动
 
 执行 `./run.sh` 或 `./run_robot.sh` 后，系统默认进入 **idle** 状态。`idle` 是机器人上电后的初始安全状态，控制器未激活主动运动控制。
