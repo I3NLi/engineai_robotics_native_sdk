@@ -173,7 +173,7 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 If there is no physical F710 receiver attached, the SDK may print a gamepad initialization retry message. This is expected when using the virtual gamepad.
 
-The T800 delivery dance task uses the policy exported from `model_84000.pt` and the bundled NPZ trajectories. Trajectory switching does not use warmup/blend. After a dance motion finishes, the robot automatically returns to `pd_stand` instead of entering `walk`.
+The T800 delivery dance task uses the validated delivery policy and bundled NPZ trajectories. Trajectory switching uses a short blend window for smoother motion changes. After a dance motion finishes, the robot follows the configured state transition in `assets/config/t800/task_motion/default.yaml`.
 
 #### System Startup
 

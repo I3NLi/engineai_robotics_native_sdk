@@ -57,5 +57,5 @@ tasks:
       - passive
       - pd_stand
       - walk
-    auto_transition: pd_stand
+    auto_transition: walk
     key: [RB, B]

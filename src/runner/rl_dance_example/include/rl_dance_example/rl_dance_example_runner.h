@@ -94,10 +94,6 @@ class RlDanceExampleRunner : public MotionRunner {
   Eigen::VectorXd q_real_;
   Eigen::VectorXd qd_real_;
   Eigen::VectorXd q_des_;
-  std::shared_ptr<Eigen::VectorXd> current_policy_joint_pos_;
-  std::shared_ptr<Eigen::VectorXd> exec_error_;
-  std::shared_ptr<Eigen::VectorXd> prev_exec_error_;
-  Eigen::VectorXd last_target_policy_joint_pos_;
   Eigen::VectorXd qd_des_;
   Eigen::VectorXd tau_ff_des_;
   Eigen::VectorXd joint_kp_;

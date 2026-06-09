@@ -20,7 +20,7 @@ pip3 install -r requirements.txt
 ## Usage
 
 ```bash
-python3 robot_debugger.py
+python3 tools/virtual_gamepad/virtual_gamepad.py
 ```
 
 Available widgets/components:
@@ -28,6 +28,30 @@ Available widgets/components:
 1. `LcmManagerWidget`: connect and disconnect from the target LCM URL.
 2. `VirtualGamepadWidget`: publish virtual gamepad messages for debugging.
 3. `diagnose_gamepad.py`: basic LCM/message diagnostics for the virtual gamepad channel.
+
+## T800 Dance Macros
+
+The virtual gamepad mirrors the Logitech F710/Xbox button mapping used by the
+SDK. For T800 delivery validation, use the state macros first:
+
+| State | Macro |
+|:------|:------|
+| pd_stand | `LB + A` |
+| passive / soft emergency fallback | `LB + RB` |
+| walk | `LB + B` |
+| dance | `RB + B` |
+
+After entering `dance`, the `Dance Motion Switch` controls use:
+
+| Motion | Macro |
+|:-------|:------|
+| Pause Toggle | `BACK` |
+| Punch | `A` |
+| Victory | `Y` |
+| Kick Turn 0.5 / 0.6 / 0.7 / 0.8 / 0.9 / 1.0 | `B`, `B + CROSS_X_UP`, `B + CROSS_Y_LEFT`, `B + CROSS_Y_RIGHT`, `B + CROSS_X_DOWN`, `B + START` |
+| Riot Combo 0.5 / 0.6 / 0.7 / 0.8 / 0.9 / 1.0 | `X`, `X + CROSS_X_UP`, `X + CROSS_Y_LEFT`, `X + CROSS_Y_RIGHT`, `X + CROSS_X_DOWN`, `X + START` |
+
+There is no standalone `START` warmup action in the delivery mapping.
 
 ## License
 

@@ -110,10 +110,6 @@ bool RlDanceExampleRunner::Enter() {
   int total_obs_dim = ComputeTotalObservationDim();
   mlp_net_observation_vec.setZero(total_obs_dim);
   mlp_net_action_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
-  current_policy_joint_pos_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
-  exec_error_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
-  prev_exec_error_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
-  last_target_policy_joint_pos_ = param_->default_joint_pos;
 
   // --- Step 4: Initialize observation history buffers ---
   // Each observation component has its own sliding-window history buffer
@@ -163,9 +159,6 @@ void RlDanceExampleRunner::fillObsContextConstantPart() {
   obs_ctx_.default_joint_q = default_joint_q_;
   obs_ctx_.policy2deploy_joint_idx = policy2deploy_joint_idx_;
   obs_ctx_.actions = mlp_net_action_;
-  obs_ctx_.current_joint_pos = current_policy_joint_pos_;
-  obs_ctx_.exec_error = exec_error_;
-  obs_ctx_.prev_exec_error = prev_exec_error_;
 }
 
 bool RlDanceExampleRunner::LoadTrajectories() {
@@ -269,10 +262,6 @@ void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_sta
     trajectory_paused_ = false;
     obs_ctx_.reference_velocity_zero = false;
     mlp_net_action_->setZero();
-    current_policy_joint_pos_->setZero();
-    exec_error_->setZero();
-    prev_exec_error_->setZero();
-    last_target_policy_joint_pos_ = param_->default_joint_pos;
     for (Eigen::MatrixXd& buffer : observation_history_buffers_) {
       buffer.setZero();
     }
@@ -547,9 +536,6 @@ void RlDanceExampleRunner::CalculateMotorCommand() {
   // but NOT directly used in action computation here)
   data_store_->joint_info.GetState(data::JointInfoType::kPosition, q_real_);
   data_store_->joint_info.GetState(data::JointInfoType::kVelocity, qd_real_);
-  *current_policy_joint_pos_ = q_real_(*policy2deploy_joint_idx_);
-  *prev_exec_error_ = *exec_error_;
-  *exec_error_ = last_target_policy_joint_pos_ - *current_policy_joint_pos_;
 
   // Run MLP forward inference (float precision, cast back to double)
   *mlp_net_action_ = (mlp_net_->Inference(mlp_net_observation_vec.cast<float>())).cast<double>();
@@ -563,10 +549,8 @@ void RlDanceExampleRunner::CalculateMotorCommand() {
     const Eigen::VectorXd ref_joint_pos = GetReferenceJointPosition(ref_step);
     const Eigen::VectorXd scaled_action = mlp_net_action_->cwiseProduct(action_scale_);
     q_des_(*policy2deploy_joint_idx_) = ref_joint_pos + scaled_action;
-    last_target_policy_joint_pos_ = q_des_(*policy2deploy_joint_idx_);
   } else {
     q_des_(*policy2deploy_joint_idx_) += mlp_net_action_->cwiseProduct(action_scale_);
-    last_target_policy_joint_pos_ = q_des_(*policy2deploy_joint_idx_);
   }
 }
 

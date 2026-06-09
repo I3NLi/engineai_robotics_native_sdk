@@ -161,7 +161,7 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 如果没有连接实体 F710 接收器，SDK 可能会打印手柄初始化重试信息；使用虚拟手柄时这是正常现象。
 
-T800 交付版的跳舞任务使用 `model_84000.pt` 导出的策略和随包 NPZ 轨迹，轨迹切换不启用 warmup/blend。跳舞动作结束后会自动回到 `pd_stand`，不会自动进入 `walk`。
+T800 交付版的跳舞任务使用已验证的交付策略和随包 NPZ 轨迹，轨迹切换使用短 blend 窗口以提升动作切换平滑度。跳舞动作结束后按照 `assets/config/t800/task_motion/default.yaml` 中的状态机配置进行后续切换。
 
 #### 系统启动
 

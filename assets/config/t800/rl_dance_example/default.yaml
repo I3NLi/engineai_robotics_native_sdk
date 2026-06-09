@@ -35,7 +35,7 @@ trajectory_policy_files:
     "rl_dance_example/policies/policy.mnn",
   ]
 trajectory_speed_scales: [1.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.0]
-trajectory_switch_blend_steps: 0
+trajectory_switch_blend_steps: 25
 default_joint_pos:
   [
     -0.06,
@@ -157,12 +157,8 @@ observation_names:
     "joint_pos",
     "joint_vel",
     "actions",
-    "ref_joint_pos_rel",
-    "ref_pos_error",
-    "exec_error",
-    "prev_exec_error",
   ]
-observation_history_lengths: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+observation_history_lengths: [1, 1, 1, 1, 1, 1, 1]
 action_scale:
   [
     0.5,
