@@ -161,6 +161,21 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 如果没有连接实体 F710 接收器，SDK 可能会打印手柄初始化重试信息；使用虚拟手柄时这是正常现象。
 
+在负载较高的工作站上，CPU 资源竞争可能导致仿真或 executor 不稳定。SDK executor 会使用 `assets/config/t800/task_resident/sim.yaml` 和 `assets/config/t800/task_motion/default.yaml` 中配置的 CPU ID，默认是 `1`、`2`、`3`。如果交付运行时使用 CPU 亲和性启动，需要确保 executor 仍然可以使用这些 CPU：
+
+```bash
+# 终端 1：将 MuJoCo 放在独立 CPU 集上
+taskset -c 16-23 ./scripts/run_mujoco.sh t800
+
+# 终端 2：将 SDK executor 放在配置中的控制 CPU 上
+taskset -c 1-3 ./run.sh t800
+
+# 终端 3：将虚拟手柄放在非控制 CPU 上
+taskset -c 30-31 python3 tools/virtual_gamepad/virtual_gamepad.py
+```
+
+如果容器本身使用了 CPU mask，也要把 executor 配置中的 CPU 包含进去，例如 `--cpuset-cpus="1-3,16-31"`。如果把 executor 绑到不包含配置 CPU 的集合上，周期控制线程可能无法启动。同一台主机上同时运行多套 SDK/MuJoCo 时，建议使用独立容器或网络命名空间，避免不同运行实例共享同一组 LCM 运行通道。
+
 T800 交付版的跳舞任务使用已验证的交付策略和随包 NPZ 轨迹，轨迹切换使用短 blend 窗口以提升动作切换平滑度。跳舞动作结束后按照 `assets/config/t800/task_motion/default.yaml` 中的状态机配置进行后续切换。
 
 #### 系统启动

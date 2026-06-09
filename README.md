@@ -173,6 +173,21 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 If there is no physical F710 receiver attached, the SDK may print a gamepad initialization retry message. This is expected when using the virtual gamepad.
 
+On heavily loaded workstations, CPU contention can make the simulator or executor unstable. The SDK executor uses the CPU IDs configured in `assets/config/t800/task_resident/sim.yaml` and `assets/config/t800/task_motion/default.yaml` (`1`, `2`, and `3` by default). If you start the delivery runtime with CPU affinity, keep those CPU IDs available to the executor:
+
+```bash
+# Terminal 1: keep MuJoCo on a separate CPU set
+taskset -c 16-23 ./scripts/run_mujoco.sh t800
+
+# Terminal 2: keep the SDK executor on the configured control CPUs
+taskset -c 1-3 ./run.sh t800
+
+# Terminal 3: keep the virtual gamepad on non-control CPUs
+taskset -c 30-31 python3 tools/virtual_gamepad/virtual_gamepad.py
+```
+
+If the container itself is started with a CPU mask, include the configured executor CPUs in that mask, for example `--cpuset-cpus="1-3,16-31"`. Binding the executor to a CPU set that excludes the configured task CPUs can prevent periodic control threads from starting. When running multiple SDK/MuJoCo instances on one host, prefer separate containers or network namespaces so that LCM traffic from different runs does not share the same runtime channel.
+
 The T800 delivery dance task uses the validated delivery policy and bundled NPZ trajectories. Trajectory switching uses a short blend window for smoother motion changes. After a dance motion finishes, the robot follows the configured state transition in `assets/config/t800/task_motion/default.yaml`.
 
 #### System Startup
