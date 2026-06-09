@@ -20,7 +20,9 @@ env:
 jobs:
   build-delivery:
     name: Build and publish compiled delivery branch
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/engineai-robotics/engineai_robotics_env:latest
 
     steps:
       - name: Checkout source
@@ -32,6 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}"
           ./build.sh -t release -j "$(nproc)"
 
       - name: Assemble delivery payload
