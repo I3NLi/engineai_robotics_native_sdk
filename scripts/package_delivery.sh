@@ -124,6 +124,49 @@ verify_required_runtime_payload() {
   require_path "${delivery_dir}/tools/virtual_gamepad/virtual_gamepad.py"
 }
 
+verify_no_internal_notes() {
+  local forbidden_names=(
+    "POLICY_REPLACEMENT_T800.md"
+    "runtime_logs"
+    "verify_logs"
+    "package_delivery.sh"
+  )
+
+  for name in "${forbidden_names[@]}"; do
+    if find "${delivery_dir}" -name "${name}" -print -quit | grep -q .; then
+      echo "Internal delivery-only file or directory found: ${name}" >&2
+      exit 1
+    fi
+  done
+
+  if grep -RInE \
+      '(/home/hiyio|runtime_logs|container_sdk_run|POLICY_REPLACEMENT|chatgpt|codex|conversation|dialogue|对话|聊天|提示词)' \
+      "${delivery_dir}" \
+      --exclude-dir=.git \
+      --exclude-dir=build \
+      --exclude='*.png' \
+      --exclude='*.jpg' \
+      --exclude='*.dae' \
+      --exclude='*.obj' \
+      --exclude='*.mnn' \
+      --exclude='*.npz' \
+      --exclude='*.so' \
+      --exclude='*.a' \
+      >/tmp/engineai_delivery_internal_notes.txt; then
+    echo "Possible internal notes found in delivery payload:" >&2
+    cat /tmp/engineai_delivery_internal_notes.txt >&2
+    exit 1
+  fi
+}
+
+copy_runtime_script() {
+  local rel_path="$1"
+
+  require_path "${source_dir}/${rel_path}"
+  mkdir -p "$(dirname "${delivery_dir}/${rel_path}")"
+  cp -a "${source_dir}/${rel_path}" "${delivery_dir}/${rel_path}"
+}
+
 rm -rf "${delivery_dir}"
 mkdir -p "${delivery_dir}/build/_install"
 
@@ -147,18 +190,21 @@ cp -a "${source_dir}/simulation/mujoco/build/src/lcm_interface/libsrc_lcm_interf
 copy_dir "${source_dir}/assets" "${delivery_dir}/assets"
 copy_dir "${source_dir}/docker" "${delivery_dir}/docker"
 copy_dir "${source_dir}/docs" "${delivery_dir}/docs"
-copy_dir "${source_dir}/scripts" "${delivery_dir}/scripts"
 copy_dir "${source_dir}/tools/virtual_gamepad" "${delivery_dir}/tools/virtual_gamepad"
+
+copy_runtime_script "scripts/env_robot.sh"
+copy_runtime_script "scripts/plotjuggler/common_data_display.xml"
+copy_runtime_script "scripts/process_dump.sh"
+copy_runtime_script "scripts/run_mujoco.sh"
+copy_runtime_script "scripts/run_plotjuggler.sh"
+copy_runtime_script "scripts/run_robot.sh"
+copy_runtime_script "scripts/set_imu_tty.sh"
 
 for file in LICENSE.txt README.md README_CN.md env.sh run.sh install.sh clear.sh; do
   if [[ -f "${source_dir}/${file}" ]]; then
     cp -a "${source_dir}/${file}" "${delivery_dir}/"
   fi
 done
-
-if [[ -f "${source_dir}/POLICY_REPLACEMENT_T800.md" ]]; then
-  cp -a "${source_dir}/POLICY_REPLACEMENT_T800.md" "${delivery_dir}/"
-fi
 
 find "${delivery_dir}/build/_install/bin" "${delivery_dir}/build/_install/lib" \
   -type f -perm -u+x -exec strip --strip-unneeded {} + 2>/dev/null || true
@@ -168,5 +214,6 @@ find "${delivery_dir}/simulation/mujoco/build" \
 write_manifest
 verify_required_runtime_payload
 verify_no_cpp_sources
+verify_no_internal_notes
 
 echo "Delivery payload assembled at ${delivery_dir}"
