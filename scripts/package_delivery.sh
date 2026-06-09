@@ -17,6 +17,7 @@ fi
 
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 delivery_dir="${1:-${DELIVERY_DIR:-}}"
+readonly t800_punch_only_policy_sha256="081dc645363ea8eb822cf8a5d94f4897a61cdbe62ad018c1e9b14d1a3cc828b5"
 
 if [[ -z "${delivery_dir}" ]]; then
   usage >&2
@@ -66,6 +67,7 @@ write_manifest() {
     printf -- '- Compiled SDK binaries: `build/_install/bin`, `build/_install/lib`\n'
     printf -- '- MuJoCo runtime binary: `simulation/mujoco/build/engineai_robotics_simulation_mujoco`\n'
     printf -- '- T800 single-Punch dance assets: `assets/config/t800/rl_dance_example`\n'
+    printf -- '- T800 policy source: Punch-only trained `policy.mnn`\n'
     printf -- '- Container helper scripts: `docker/`\n'
     printf -- '- Virtual gamepad: `tools/virtual_gamepad`\n\n'
     printf '## Source exclusion policy\n\n'
@@ -79,6 +81,8 @@ write_manifest() {
       printf '## Packaged T800 policy files\n\n'
       find "${delivery_dir}/assets/config/t800/rl_dance_example/policies" -maxdepth 1 -type f \
         -printf '- `%f`\n' | sort
+      printf '\n'
+      printf -- '- `policy.mnn` sha256: `%s`\n' "${t800_punch_only_policy_sha256}"
       printf '\n'
     } >> "${manifest}"
   fi
@@ -129,9 +133,19 @@ verify_t800_single_punch_payload() {
   local dance_dir="${delivery_dir}/assets/config/t800/rl_dance_example"
   local trajectories_dir="${dance_dir}/trajectories"
   local default_config="${dance_dir}/default.yaml"
+  local policy_file="${dance_dir}/policies/policy.mnn"
+  local policy_sha256
 
   require_path "${default_config}"
+  require_path "${policy_file}"
   require_path "${trajectories_dir}/Punch_Swing_L_50hz.npz"
+
+  policy_sha256="$(sha256sum "${policy_file}" | awk '{print $1}')"
+  if [[ "${policy_sha256}" != "${t800_punch_only_policy_sha256}" ]]; then
+    echo "Unexpected T800 Punch-only policy sha256: ${policy_sha256}" >&2
+    echo "Expected: ${t800_punch_only_policy_sha256}" >&2
+    exit 1
+  fi
 
   if find "${trajectories_dir}" -maxdepth 1 -type f -name '*.npz' ! -name 'Punch_Swing_L_50hz.npz' -print -quit | grep -q .; then
     echo "Unexpected T800 dance trajectory found in delivery payload:" >&2
