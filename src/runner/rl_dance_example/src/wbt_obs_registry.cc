@@ -57,6 +57,9 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
             ref_pos = (1.0 - alpha) * ctx.trajectory_blend_from_joint_pos + alpha * ref_pos;
             ref_vel = (1.0 - alpha) * ctx.trajectory_blend_from_joint_vel + alpha * ref_vel;
           }
+          if (ctx.reference_velocity_zero) {
+            ref_vel.setZero();
+          }
           if (ctx.data_store && ctx.soft_joint_pos_limit && ctx.policy2deploy_joint_idx &&
               ctx.soft_joint_pos_limit->size() == ref_pos.size()) {
             int n = ctx.data_store->model_param->num_total_joints;
@@ -168,6 +171,54 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
             return Eigen::VectorXd();
           }
           return *ctx.actions;
+        },
+    };
+
+    registry["ref_joint_pos_rel"] = {
+        [](int na) { return na; },
+        [](const ObsContext& ctx) {
+          if (!ctx.ref_joint_pos_all || !ctx.default_joint_q || !ctx.policy2deploy_joint_idx) {
+            LOG(ERROR) << "[obs:ref_joint_pos_rel] missing reference/default/mapping";
+            return Eigen::VectorXd();
+          }
+          int r = ctx.ref_joint_pos_all->rows();
+          int step = r > 0 ? std::min(ctx.policy_step, r - 1) : 0;
+          Eigen::VectorXd ref_pos = ctx.ref_joint_pos_all->row(step);
+          return (ref_pos - (*ctx.default_joint_q)(*ctx.policy2deploy_joint_idx)).eval();
+        },
+    };
+
+    registry["ref_pos_error"] = {
+        [](int na) { return na; },
+        [](const ObsContext& ctx) {
+          if (!ctx.ref_joint_pos_all || !ctx.current_joint_pos) {
+            LOG(ERROR) << "[obs:ref_pos_error] missing reference/current joint position";
+            return Eigen::VectorXd();
+          }
+          int r = ctx.ref_joint_pos_all->rows();
+          int step = r > 0 ? std::min(ctx.policy_step, r - 1) : 0;
+          Eigen::VectorXd ref_pos = ctx.ref_joint_pos_all->row(step);
+          return (ref_pos - *ctx.current_joint_pos).eval();
+        },
+    };
+
+    registry["exec_error"] = {
+        [](int na) { return na; },
+        [](const ObsContext& ctx) {
+          if (!ctx.exec_error) {
+            return Eigen::VectorXd(Eigen::VectorXd::Zero(ctx.num_actions));
+          }
+          return Eigen::VectorXd(*ctx.exec_error);
+        },
+    };
+
+    registry["prev_exec_error"] = {
+        [](int na) { return na; },
+        [](const ObsContext& ctx) {
+          if (!ctx.prev_exec_error) {
+            return Eigen::VectorXd(Eigen::VectorXd::Zero(ctx.num_actions));
+          }
+          return Eigen::VectorXd(*ctx.prev_exec_error);
         },
     };
 

@@ -20,11 +20,15 @@ struct ObsContext {
   std::shared_ptr<const Eigen::MatrixXd> ref_joint_vel_all = nullptr;
   std::shared_ptr<const Eigen::MatrixXd> ref_body_quat_w_all = nullptr;
   int policy_step = 0;
+  bool reference_velocity_zero = false;
 
   int num_actions = 0;
   std::shared_ptr<Eigen::VectorXd> default_joint_q = nullptr;
   std::shared_ptr<Eigen::VectorXi> policy2deploy_joint_idx = nullptr;
   std::shared_ptr<Eigen::VectorXd> actions = nullptr;
+  std::shared_ptr<Eigen::VectorXd> current_joint_pos = nullptr;
+  std::shared_ptr<Eigen::VectorXd> exec_error = nullptr;
+  std::shared_ptr<Eigen::VectorXd> prev_exec_error = nullptr;
 
   Eigen::Matrix3d ref_init_yaw_rot = Eigen::Matrix3d::Identity();
   Eigen::Matrix3d body_init_yaw_rot = Eigen::Matrix3d::Identity();

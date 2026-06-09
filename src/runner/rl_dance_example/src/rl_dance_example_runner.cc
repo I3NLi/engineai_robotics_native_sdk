@@ -31,6 +31,7 @@
 #include "rl_dance_example/rl_dance_example_runner.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <glog/logging.h>
 
@@ -100,12 +101,8 @@ bool RlDanceExampleRunner::Enter() {
   (*default_joint_q_)(*policy2deploy_joint_idx_) = param_->default_joint_pos;
   action_scale_ = param_->action_scale;
 
-  // --- Step 3: Load the MLP policy network ---
-  std::string policy_path =
-      common::PathJoin(common::GlobalPathManager::GetInstance().GetConfigPath(), param_->policy_file);
-  mlp_net_ = std::make_unique<math::MNNModel>(policy_path);
-  if (!mlp_net_) {
-    LOG(ERROR) << "[WbtRunner::Enter] Failed to load policy model";
+  // --- Step 3: Load the default MLP policy network ---
+  if (!LoadPolicy(param_->policy_file)) {
     return false;
   }
 
@@ -113,6 +110,10 @@ bool RlDanceExampleRunner::Enter() {
   int total_obs_dim = ComputeTotalObservationDim();
   mlp_net_observation_vec.setZero(total_obs_dim);
   mlp_net_action_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
+  current_policy_joint_pos_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
+  exec_error_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
+  prev_exec_error_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
+  last_target_policy_joint_pos_ = param_->default_joint_pos;
 
   // --- Step 4: Initialize observation history buffers ---
   // Each observation component has its own sliding-window history buffer
@@ -131,6 +132,9 @@ bool RlDanceExampleRunner::Enter() {
   // --- Step 6: Reset runtime state ---
   is_first_time_ = true;
   policy_step = 0;
+  policy_phase_ = 0.0;
+  previous_pause_button_ = false;
+  trajectory_paused_ = false;
   GetMutableOutput().Reset();
 
   // Pre-fill observation context fields that remain constant throughout execution
@@ -159,6 +163,9 @@ void RlDanceExampleRunner::fillObsContextConstantPart() {
   obs_ctx_.default_joint_q = default_joint_q_;
   obs_ctx_.policy2deploy_joint_idx = policy2deploy_joint_idx_;
   obs_ctx_.actions = mlp_net_action_;
+  obs_ctx_.current_joint_pos = current_policy_joint_pos_;
+  obs_ctx_.exec_error = exec_error_;
+  obs_ctx_.prev_exec_error = prev_exec_error_;
 }
 
 bool RlDanceExampleRunner::LoadTrajectories() {
@@ -171,16 +178,32 @@ bool RlDanceExampleRunner::LoadTrajectories() {
     trajectory_files.push_back(param_->trajectory_file_npz);
   }
 
+  std::vector<std::string> trajectory_policy_files;
+  if (param_->trajectory_policy_files && !param_->trajectory_policy_files->empty()) {
+    trajectory_policy_files = *param_->trajectory_policy_files;
+  }
+
+  std::vector<double> trajectory_speed_scales;
+  if (param_->trajectory_speed_scales && !param_->trajectory_speed_scales->empty()) {
+    trajectory_speed_scales = *param_->trajectory_speed_scales;
+  }
+
   trajectories_.reserve(trajectory_files.size());
-  for (const std::string& trajectory_file : trajectory_files) {
+  for (size_t i = 0; i < trajectory_files.size(); ++i) {
+    const std::string& trajectory_file = trajectory_files[i];
     const std::string traj_path =
         common::PathJoin(common::GlobalPathManager::GetInstance().GetConfigPath(), trajectory_file);
     cnpy::npz_t npz = cnpy::npz_load(traj_path);
 
     TrajectoryData trajectory;
     trajectory.file = trajectory_file;
+    trajectory.policy_file =
+        i < trajectory_policy_files.size() && !trajectory_policy_files[i].empty() ? trajectory_policy_files[i]
+                                                                                  : param_->policy_file;
+    trajectory.speed_scale = i < trajectory_speed_scales.size() ? trajectory_speed_scales[i] : 1.0;
     trajectory.joint_pos_all = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["joint_pos"]));
-    trajectory.joint_vel_all = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["joint_vel"]));
+    trajectory.joint_vel_all =
+        std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["joint_vel"]) * trajectory.speed_scale);
     trajectory.body_quat_w_all = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["body_quat_w"]));
     trajectory.max_policy_step = trajectory.joint_pos_all->rows() - 1;
 
@@ -222,7 +245,14 @@ void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_sta
   }
 
   const TrajectoryData& trajectory = trajectories_[trajectory_index];
+  if (!trajectory.policy_file.empty() && trajectory.policy_file != active_policy_file_ &&
+      !LoadPolicy(trajectory.policy_file)) {
+    LOG(ERROR) << "[WbtRunner::SelectTrajectory] Failed to switch policy for trajectory " << trajectory_index;
+    return;
+  }
+
   active_trajectory_index_ = trajectory_index;
+  active_trajectory_speed_scale_ = std::max(0.05, trajectory.speed_scale);
   ref_joint_pos_all_ = trajectory.joint_pos_all;
   ref_joint_vel_all_ = trajectory.joint_vel_all;
   ref_body_quat_w_all_ = trajectory.body_quat_w_all;
@@ -234,8 +264,15 @@ void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_sta
 
   if (reset_state) {
     policy_step = 0;
+    policy_phase_ = 0.0;
     is_first_time_ = true;
+    trajectory_paused_ = false;
+    obs_ctx_.reference_velocity_zero = false;
     mlp_net_action_->setZero();
+    current_policy_joint_pos_->setZero();
+    exec_error_->setZero();
+    prev_exec_error_->setZero();
+    last_target_policy_joint_pos_ = param_->default_joint_pos;
     for (Eigen::MatrixXd& buffer : observation_history_buffers_) {
       buffer.setZero();
     }
@@ -250,7 +287,8 @@ void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_sta
   }
 
   LOG(INFO) << "[WbtRunner::SelectTrajectory] Active trajectory " << active_trajectory_index_ << ": "
-            << trajectory.file << ", frames=" << trajectory.joint_pos_all->rows();
+            << trajectory.file << ", policy=" << active_policy_file_ << ", speed=" << active_trajectory_speed_scale_
+            << ", frames=" << trajectory.joint_pos_all->rows();
 }
 
 void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
@@ -259,20 +297,53 @@ void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
   }
 
   const auto gamepad_info = data_store_->gamepad_info.Get();
+  const bool pause_pressed = gamepad_info->BACK && !gamepad_info->LB && !gamepad_info->RB;
+  if (pause_pressed && !previous_pause_button_) {
+    trajectory_paused_ = !trajectory_paused_;
+    obs_ctx_.reference_velocity_zero = trajectory_paused_;
+    LOG(INFO) << "[WbtRunner::Pause] Trajectory pause " << (trajectory_paused_ ? "enabled" : "disabled")
+              << " at step " << policy_step;
+  }
+  previous_pause_button_ = pause_pressed;
+  if (pause_pressed) {
+    previous_motion_select_button_ = -1;
+    return;
+  }
+
   if (gamepad_info->LB || gamepad_info->RB) {
     previous_motion_select_button_ = -1;
     return;
   }
 
   int selected = -1;
-  if (gamepad_info->A) {
-    selected = 0;
+  if (gamepad_info->B && gamepad_info->CROSS_X > 0) {
+    selected = 2;  // Kick Turn 0.6
+  } else if (gamepad_info->B && gamepad_info->CROSS_Y > 0) {
+    selected = 3;  // Kick Turn 0.7
+  } else if (gamepad_info->B && gamepad_info->CROSS_Y < 0) {
+    selected = 4;  // Kick Turn 0.8
+  } else if (gamepad_info->B && gamepad_info->CROSS_X < 0) {
+    selected = 5;  // Kick Turn 0.9
+  } else if (gamepad_info->B && gamepad_info->START) {
+    selected = 6;  // Kick Turn 1.0
+  } else if (gamepad_info->X && gamepad_info->CROSS_X > 0) {
+    selected = 8;  // Riot Combo 0.6
+  } else if (gamepad_info->X && gamepad_info->CROSS_Y > 0) {
+    selected = 9;  // Riot Combo 0.7
+  } else if (gamepad_info->X && gamepad_info->CROSS_Y < 0) {
+    selected = 10;  // Riot Combo 0.8
+  } else if (gamepad_info->X && gamepad_info->CROSS_X < 0) {
+    selected = 11;  // Riot Combo 0.9
+  } else if (gamepad_info->X && gamepad_info->START) {
+    selected = 12;  // Riot Combo 1.0
+  } else if (gamepad_info->A) {
+    selected = 0;  // Punch
   } else if (gamepad_info->B) {
-    selected = 1;
+    selected = 1;  // Kick Turn 0.5
   } else if (gamepad_info->X) {
-    selected = 2;
+    selected = 7;  // Riot Combo 0.5
   } else if (gamepad_info->Y) {
-    selected = 3;
+    selected = 13;  // Victory
   }
 
   if (selected < 0) {
@@ -312,6 +383,19 @@ Eigen::VectorXd RlDanceExampleRunner::GetReferenceJointPosition(int ref_step) co
   return ref_joint_pos;
 }
 
+bool RlDanceExampleRunner::LoadPolicy(const std::string& policy_file) {
+  const std::string policy_path =
+      common::PathJoin(common::GlobalPathManager::GetInstance().GetConfigPath(), policy_file);
+  mlp_net_ = std::make_unique<math::MNNModel>(policy_path);
+  if (!mlp_net_) {
+    LOG(ERROR) << "[WbtRunner::LoadPolicy] Failed to load policy model: " << policy_path;
+    return false;
+  }
+  active_policy_file_ = policy_file;
+  LOG(INFO) << "[WbtRunner::LoadPolicy] Loaded policy: " << active_policy_file_;
+  return true;
+}
+
 // ============================================================================
 // Main Control Loop
 // ============================================================================
@@ -325,14 +409,20 @@ Eigen::VectorXd RlDanceExampleRunner::GetReferenceJointPosition(int ref_step) co
  */
 void RlDanceExampleRunner::Run() {
   UpdateTrajectorySelectionFromGamepad();
+  obs_ctx_.reference_velocity_zero = trajectory_paused_;
   CalculateObservation();   // Assemble observation from registered components
   CalculateMotorCommand();  // Run policy inference and compute target positions
   SendMotorCommand();       // Send PD commands to motors
-  UpdateTrajectoryBlend();
+  if (!trajectory_paused_) {
+    UpdateTrajectoryBlend();
+  }
 
   // Advance trajectory frame and loop back to the start.
   // policy_step = (policy_step >= max_policy_step) ? 0 : policy_step + 1;
-  policy_step = std::min(policy_step + 1, max_policy_step);
+  if (!trajectory_paused_) {
+    policy_phase_ = std::min(policy_phase_ + active_trajectory_speed_scale_, static_cast<double>(max_policy_step));
+    policy_step = std::min(static_cast<int>(std::floor(policy_phase_)), max_policy_step);
+  }
 }
 
 // ============================================================================
@@ -457,6 +547,9 @@ void RlDanceExampleRunner::CalculateMotorCommand() {
   // but NOT directly used in action computation here)
   data_store_->joint_info.GetState(data::JointInfoType::kPosition, q_real_);
   data_store_->joint_info.GetState(data::JointInfoType::kVelocity, qd_real_);
+  *current_policy_joint_pos_ = q_real_(*policy2deploy_joint_idx_);
+  *prev_exec_error_ = *exec_error_;
+  *exec_error_ = last_target_policy_joint_pos_ - *current_policy_joint_pos_;
 
   // Run MLP forward inference (float precision, cast back to double)
   *mlp_net_action_ = (mlp_net_->Inference(mlp_net_observation_vec.cast<float>())).cast<double>();
@@ -470,8 +563,10 @@ void RlDanceExampleRunner::CalculateMotorCommand() {
     const Eigen::VectorXd ref_joint_pos = GetReferenceJointPosition(ref_step);
     const Eigen::VectorXd scaled_action = mlp_net_action_->cwiseProduct(action_scale_);
     q_des_(*policy2deploy_joint_idx_) = ref_joint_pos + scaled_action;
+    last_target_policy_joint_pos_ = q_des_(*policy2deploy_joint_idx_);
   } else {
     q_des_(*policy2deploy_joint_idx_) += mlp_net_action_->cwiseProduct(action_scale_);
+    last_target_policy_joint_pos_ = q_des_(*policy2deploy_joint_idx_);
   }
 }
 

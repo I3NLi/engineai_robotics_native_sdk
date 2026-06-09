@@ -33,6 +33,8 @@ class RlDanceExampleRunner : public MotionRunner {
  private:
   struct TrajectoryData {
     std::string file;
+    std::string policy_file;
+    double speed_scale = 1.0;
     std::shared_ptr<const Eigen::MatrixXd> joint_pos_all;
     std::shared_ptr<const Eigen::MatrixXd> joint_vel_all;
     std::shared_ptr<const Eigen::MatrixXd> body_quat_w_all;
@@ -50,6 +52,7 @@ class RlDanceExampleRunner : public MotionRunner {
   void UpdateTrajectorySelectionFromGamepad();
   void UpdateTrajectoryBlend();
   Eigen::VectorXd GetReferenceJointPosition(int ref_step) const;
+  bool LoadPolicy(const std::string& policy_file);
 
   Eigen::MatrixXd npyFloatToMatrixXd(const cnpy::NpyArray& npy_array, int row_index = 0);
 
@@ -62,9 +65,13 @@ class RlDanceExampleRunner : public MotionRunner {
   std::shared_ptr<const Eigen::MatrixXd> ref_joint_vel_all_;
   std::shared_ptr<const Eigen::MatrixXd> ref_body_quat_w_all_;
   std::vector<TrajectoryData> trajectories_;
+  std::string active_policy_file_;
+  double active_trajectory_speed_scale_ = 1.0;
   int active_trajectory_index_ = 0;
   int max_policy_step = 0;
   int previous_motion_select_button_ = -1;
+  bool previous_pause_button_ = false;
+  bool trajectory_paused_ = false;
   int trajectory_blend_step_ = 0;
   int trajectory_blend_steps_ = 0;
 
@@ -79,6 +86,7 @@ class RlDanceExampleRunner : public MotionRunner {
   // --- First frame ---
   bool is_first_time_ = true;
   int policy_step = 0;
+  double policy_phase_ = 0.0;
 
   // --- Joint and mapping ---
   std::shared_ptr<Eigen::VectorXi> policy2deploy_joint_idx_;
@@ -86,6 +94,10 @@ class RlDanceExampleRunner : public MotionRunner {
   Eigen::VectorXd q_real_;
   Eigen::VectorXd qd_real_;
   Eigen::VectorXd q_des_;
+  std::shared_ptr<Eigen::VectorXd> current_policy_joint_pos_;
+  std::shared_ptr<Eigen::VectorXd> exec_error_;
+  std::shared_ptr<Eigen::VectorXd> prev_exec_error_;
+  Eigen::VectorXd last_target_policy_joint_pos_;
   Eigen::VectorXd qd_des_;
   Eigen::VectorXd tau_ff_des_;
   Eigen::VectorXd joint_kp_;
