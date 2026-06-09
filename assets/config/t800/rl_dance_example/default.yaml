@@ -3,38 +3,12 @@ trajectory_file_npz: "rl_dance_example/trajectories/Punch_Swing_L_50hz.npz"
 trajectory_files_npz:
   [
     "rl_dance_example/trajectories/Punch_Swing_L_50hz.npz",
-    "rl_dance_example/trajectories/kick_Turn_50hz.npz",
-    "rl_dance_example/trajectories/kick_Turn_50hz.npz",
-    "rl_dance_example/trajectories/kick_Turn_50hz.npz",
-    "rl_dance_example/trajectories/kick_Turn_50hz.npz",
-    "rl_dance_example/trajectories/kick_Turn_50hz.npz",
-    "rl_dance_example/trajectories/kick_Turn_50hz.npz",
-    "rl_dance_example/trajectories/riot_combo_50hz.npz",
-    "rl_dance_example/trajectories/riot_combo_50hz.npz",
-    "rl_dance_example/trajectories/riot_combo_50hz.npz",
-    "rl_dance_example/trajectories/riot_combo_50hz.npz",
-    "rl_dance_example/trajectories/riot_combo_50hz.npz",
-    "rl_dance_example/trajectories/riot_combo_50hz.npz",
-    "rl_dance_example/trajectories/victory_50hz.npz",
   ]
 trajectory_policy_files:
   [
     "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
-    "rl_dance_example/policies/policy.mnn",
   ]
-trajectory_speed_scales: [1.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.0]
+trajectory_speed_scales: [1.0]
 trajectory_switch_blend_steps: 25
 default_joint_pos:
   [

@@ -41,17 +41,14 @@ SDK. For T800 delivery validation, use the state macros first:
 | walk | `LB + B` |
 | dance | `RB + B` |
 
-After entering `dance`, the `Dance Motion Switch` controls use:
+After entering `dance`, this delivery exposes only the single Punch motion:
 
 | Motion | Macro |
 |:-------|:------|
 | Pause Toggle | `BACK` |
 | Punch | `A` |
-| Victory | `Y` |
-| Kick Turn 0.5 / 0.6 / 0.7 / 0.8 / 0.9 / 1.0 | `B`, `B + CROSS_X_UP`, `B + CROSS_Y_LEFT`, `B + CROSS_Y_RIGHT`, `B + CROSS_X_DOWN`, `B + START` |
-| Riot Combo 0.5 / 0.6 / 0.7 / 0.8 / 0.9 / 1.0 | `X`, `X + CROSS_X_UP`, `X + CROSS_Y_LEFT`, `X + CROSS_Y_RIGHT`, `X + CROSS_X_DOWN`, `X + START` |
 
-There is no standalone `START` warmup action in the delivery mapping.
+Other dance motions are intentionally not included in this delivery mapping.
 
 ## License
 

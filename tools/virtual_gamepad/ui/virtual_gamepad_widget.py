@@ -137,29 +137,6 @@ class VirtualGamepadWidget(QWidget):
                 (
                     ("Pause Toggle", ("BACK",)),
                     ("Punch", ("A",)),
-                    ("Victory", ("Y",)),
-                ),
-            ),
-            (
-                "Kick Turn",
-                (
-                    ("0.5", ("B",)),
-                    ("0.6", ("B", "CROSS_X_UP")),
-                    ("0.7", ("B", "CROSS_Y_LEFT")),
-                    ("0.8", ("B", "CROSS_Y_RIGHT")),
-                    ("0.9", ("B", "CROSS_X_DOWN")),
-                    ("1.0", ("B", "START")),
-                ),
-            ),
-            (
-                "Riot Combo",
-                (
-                    ("0.5", ("X",)),
-                    ("0.6", ("X", "CROSS_X_UP")),
-                    ("0.7", ("X", "CROSS_Y_LEFT")),
-                    ("0.8", ("X", "CROSS_Y_RIGHT")),
-                    ("0.9", ("X", "CROSS_X_DOWN")),
-                    ("1.0", ("X", "START")),
                 ),
             ),
         )

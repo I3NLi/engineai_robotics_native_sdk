@@ -65,7 +65,7 @@ write_manifest() {
     printf '## Included runtime content\n\n'
     printf -- '- Compiled SDK binaries: `build/_install/bin`, `build/_install/lib`\n'
     printf -- '- MuJoCo runtime binary: `simulation/mujoco/build/engineai_robotics_simulation_mujoco`\n'
-    printf -- '- T800 policy assets: `assets/config/t800/rl_dance_example/policies`\n'
+    printf -- '- T800 single-Punch dance assets: `assets/config/t800/rl_dance_example`\n'
     printf -- '- Container helper scripts: `docker/`\n'
     printf -- '- Virtual gamepad: `tools/virtual_gamepad`\n\n'
     printf '## Source exclusion policy\n\n'
@@ -121,7 +121,29 @@ verify_required_runtime_payload() {
   require_path "${delivery_dir}/simulation/mujoco/build/engineai_robotics_simulation_mujoco"
   require_path "${delivery_dir}/simulation/mujoco/build/src/lcm_interface/libsrc_lcm_interface.so"
   require_path "${delivery_dir}/assets/config/t800/rl_dance_example/policies/policy.mnn"
+  require_path "${delivery_dir}/assets/config/t800/rl_dance_example/trajectories/Punch_Swing_L_50hz.npz"
   require_path "${delivery_dir}/tools/virtual_gamepad/virtual_gamepad.py"
+}
+
+verify_t800_single_punch_payload() {
+  local dance_dir="${delivery_dir}/assets/config/t800/rl_dance_example"
+  local trajectories_dir="${dance_dir}/trajectories"
+  local default_config="${dance_dir}/default.yaml"
+
+  require_path "${default_config}"
+  require_path "${trajectories_dir}/Punch_Swing_L_50hz.npz"
+
+  if find "${trajectories_dir}" -maxdepth 1 -type f -name '*.npz' ! -name 'Punch_Swing_L_50hz.npz' -print -quit | grep -q .; then
+    echo "Unexpected T800 dance trajectory found in delivery payload:" >&2
+    find "${trajectories_dir}" -maxdepth 1 -type f -name '*.npz' ! -name 'Punch_Swing_L_50hz.npz' -print >&2
+    exit 1
+  fi
+
+  if grep -nE '(kick_Turn|riot_combo|victory_50hz|warmup|Punch_Swing_L_fk)' "${default_config}" >/tmp/engineai_delivery_t800_motion_refs.txt; then
+    echo "Unexpected T800 dance motion reference found in delivery config:" >&2
+    cat /tmp/engineai_delivery_t800_motion_refs.txt >&2
+    exit 1
+  fi
 }
 
 verify_no_internal_notes() {
@@ -213,6 +235,7 @@ find "${delivery_dir}/simulation/mujoco/build" \
 
 write_manifest
 verify_required_runtime_payload
+verify_t800_single_punch_payload
 verify_no_cpp_sources
 verify_no_internal_notes
 

@@ -188,7 +188,7 @@ taskset -c 30-31 python3 tools/virtual_gamepad/virtual_gamepad.py
 
 If the container itself is started with a CPU mask, include the configured executor CPUs in that mask, for example `--cpuset-cpus="1-3,16-31"`. Binding the executor to a CPU set that excludes the configured task CPUs can prevent periodic control threads from starting. When running multiple SDK/MuJoCo instances on one host, prefer separate containers or network namespaces so that LCM traffic from different runs does not share the same runtime channel.
 
-The T800 delivery dance task uses the validated delivery policy and bundled NPZ trajectories. Trajectory switching uses a short blend window for smoother motion changes. After a dance motion finishes, the robot follows the configured state transition in `assets/config/t800/task_motion/default.yaml`.
+The T800 delivery dance task uses the earliest Punch-default policy package and exposes only `Punch_Swing_L_50hz.npz`. Other dance trajectories and motion-switch shortcuts are intentionally not included in this delivery. After the Punch motion finishes, the robot follows the configured state transition in `assets/config/t800/task_motion/default.yaml`.
 
 #### System Startup
 
