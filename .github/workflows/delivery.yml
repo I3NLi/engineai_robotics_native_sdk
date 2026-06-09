@@ -15,7 +15,7 @@ concurrency:
 
 env:
   DELIVERY_BRANCH: delivery
-  DELIVERY_DIR: ${{ runner.temp }}/engineai_robotics_delivery
+  DELIVERY_DIR: /tmp/engineai_robotics_delivery
 
 jobs:
   build-delivery:
