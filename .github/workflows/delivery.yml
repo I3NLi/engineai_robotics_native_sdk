@@ -42,89 +42,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          rm -rf "${DELIVERY_DIR}"
-          mkdir -p "${DELIVERY_DIR}/build/_install"
-
-          # Compiled outputs only. Do not publish installed headers.
-          rsync -a build/_install/bin "${DELIVERY_DIR}/build/_install/"
-          rsync -a build/_install/lib "${DELIVERY_DIR}/build/_install/"
-          if [ -d build/_install/share ]; then
-            rsync -a build/_install/share "${DELIVERY_DIR}/build/_install/"
-          fi
-
-          mkdir -p "${DELIVERY_DIR}/simulation/mujoco/build/src/lcm_interface"
-          cp -a simulation/mujoco/build/engineai_robotics_simulation_mujoco \
-            "${DELIVERY_DIR}/simulation/mujoco/build/"
-          cp -a simulation/mujoco/build/src/lcm_interface/libsrc_lcm_interface.so \
-            "${DELIVERY_DIR}/simulation/mujoco/build/src/lcm_interface/"
-
-          # Runtime assets and operator-facing docs/scripts.
-          rsync -a assets "${DELIVERY_DIR}/"
-          rsync -a docs "${DELIVERY_DIR}/"
-          rsync -a scripts "${DELIVERY_DIR}/"
-          rsync -a tools "${DELIVERY_DIR}/"
-
-          for file in LICENSE.txt README.md README_CN.md env.sh run.sh install.sh clear.sh; do
-            if [ -f "${file}" ]; then
-              cp -a "${file}" "${DELIVERY_DIR}/"
-            fi
-          done
-
-          if [ -f POLICY_REPLACEMENT_T800.md ]; then
-            cp -a POLICY_REPLACEMENT_T800.md "${DELIVERY_DIR}/"
-          fi
-
-          {
-            printf '# EngineAI Native SDK Delivery\n\n'
-            printf 'This branch is generated automatically by GitHub Actions.\n\n'
-            printf -- '- Source repository: %s\n' "${GITHUB_REPOSITORY}"
-            printf -- '- Source branch: %s\n' "${GITHUB_REF_NAME}"
-            printf -- '- Source commit: %s\n' "${GITHUB_SHA}"
-            printf -- '- Workflow run: %s/%s/actions/runs/%s\n' "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
-            printf -- '- Build type: release\n\n'
-            printf 'The delivery branch intentionally excludes C/C++ source trees such as\n'
-            printf '`src/`, `core/`, CMake files, and installed headers.\n'
-          } > "${DELIVERY_DIR}/DELIVERY_MANIFEST.md"
-
-          # Reduce binary size where possible. Ignore non-ELF files.
-          find "${DELIVERY_DIR}/build/_install/bin" "${DELIVERY_DIR}/build/_install/lib" \
-            -type f -perm -u+x -exec strip --strip-unneeded {} + 2>/dev/null || true
-
-      - name: Verify source code is excluded
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "${DELIVERY_DIR}"
-
-          forbidden_paths=(
-            "./src"
-            "./core"
-            "./cmake"
-            "./CMakeLists.txt"
-            "./build.sh"
-          )
-          for path in "${forbidden_paths[@]}"; do
-            if [ -e "${path}" ]; then
-              echo "Forbidden delivery path found: ${path}" >&2
-              exit 1
-            fi
-          done
-
-          if find . -type f \( \
-              -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.cxx' -o \
-              -name '*.h' -o -name '*.hh' -o -name '*.hpp' -o -name '*.hxx' \
-            \) -print -quit | grep -q .; then
-            echo "C/C++ source or header files found in delivery payload:" >&2
-            find . -type f \( \
-              -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.cxx' -o \
-              -name '*.h' -o -name '*.hh' -o -name '*.hpp' -o -name '*.hxx' \
-            \) >&2
-            exit 1
-          fi
+          ./scripts/package_delivery.sh "${DELIVERY_DIR}"
 
       - name: Publish delivery branch
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           cd "${DELIVERY_DIR}"
