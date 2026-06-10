@@ -130,11 +130,19 @@ bool RlDanceExampleRunner::Enter() {
   policy_step = 0;
   policy_phase_ = 0.0;
   previous_pause_button_ = false;
-  trajectory_paused_ = false;
+  previous_motion_select_button_ = -1;
+  trajectory_paused_ = trajectories_.size() > 1;
+  waiting_for_motion_select_release_ = trajectory_paused_;
+  motion_selected_since_enter_ = !trajectory_paused_;
   GetMutableOutput().Reset();
 
   // Pre-fill observation context fields that remain constant throughout execution
   fillObsContextConstantPart();
+  obs_ctx_.reference_velocity_zero = trajectory_paused_;
+
+  if (trajectory_paused_) {
+    LOG(INFO) << "[WbtRunner::Enter] Dance entered in paused selection mode; choose a motion to start playback.";
+  }
 
   LOG(INFO) << "[WbtRunner::Enter] Done, obs_dim=" << total_obs_dim << ", actions=" << param_->num_actions
             << ", frames=" << ref_joint_pos_all_->rows();
@@ -286,8 +294,29 @@ void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
   }
 
   const auto gamepad_info = data_store_->gamepad_info.Get();
+  const bool selection_input_active = gamepad_info->A || gamepad_info->B || gamepad_info->X || gamepad_info->Y ||
+                                      gamepad_info->START || gamepad_info->BACK || gamepad_info->LB ||
+                                      gamepad_info->RB || (gamepad_info->CROSS_X != 0) ||
+                                      (gamepad_info->CROSS_Y != 0);
+
+  if (waiting_for_motion_select_release_) {
+    previous_motion_select_button_ = -1;
+    previous_pause_button_ = false;
+    if (selection_input_active) {
+      return;
+    }
+    waiting_for_motion_select_release_ = false;
+    LOG(INFO) << "[WbtRunner::Enter] Motion selection controls released; waiting for operator motion choice.";
+    return;
+  }
+
   const bool pause_pressed = gamepad_info->BACK && !gamepad_info->LB && !gamepad_info->RB;
   if (pause_pressed && !previous_pause_button_) {
+    if (!motion_selected_since_enter_) {
+      LOG(INFO) << "[WbtRunner::Pause] Ignored until a dance motion is selected.";
+      previous_pause_button_ = pause_pressed;
+      return;
+    }
     trajectory_paused_ = !trajectory_paused_;
     obs_ctx_.reference_velocity_zero = trajectory_paused_;
     LOG(INFO) << "[WbtRunner::Pause] Trajectory pause " << (trajectory_paused_ ? "enabled" : "disabled")
@@ -342,6 +371,9 @@ void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
 
   if (selected != previous_motion_select_button_ && selected < static_cast<int>(trajectories_.size())) {
     SelectTrajectory(selected, true);
+    motion_selected_since_enter_ = true;
+    trajectory_paused_ = false;
+    obs_ctx_.reference_velocity_zero = false;
   }
   previous_motion_select_button_ = selected;
 }

@@ -41,7 +41,8 @@ SDK. For T800 delivery validation, use the state macros first:
 | walk | `LB + B` |
 | dance | `RB + B` |
 
-After entering `dance`, this delivery exposes the validated multi-motion set:
+The `dance` macro only enters the dance state. Playback remains paused until a
+motion below is selected:
 
 | Motion | Macro |
 |:-------|:------|

@@ -188,7 +188,7 @@ taskset -c 30-31 python3 tools/virtual_gamepad/virtual_gamepad.py
 
 If the container itself is started with a CPU mask, include the configured executor CPUs in that mask, for example `--cpuset-cpus="1-3,16-31"`. Binding the executor to a CPU set that excludes the configured task CPUs can prevent periodic control threads from starting. When running multiple SDK/MuJoCo instances on one host, prefer separate containers or network namespaces so that LCM traffic from different runs does not share the same runtime channel.
 
-The T800 delivery dance task uses the validated multi-motion tracking policy and includes `Punch_Swing_L_50hz.npz`, `kick_Turn_50hz.npz`, `riot_combo_50hz.npz`, and `victory_50hz.npz`. Use the virtual gamepad dance controls to switch motions; soft emergency fallback remains `LB + RB`.
+The T800 delivery dance task uses the validated multi-motion tracking policy and includes `Punch_Swing_L_50hz.npz`, `kick_Turn_50hz.npz`, `riot_combo_50hz.npz`, and `victory_50hz.npz`. Entering `dance` only arms the dance runner; it waits paused until you choose Punch, Kick Turn, Riot Combo, or Victory from the virtual gamepad dance controls. Soft emergency fallback remains `LB + RB`.
 
 #### System Startup
 

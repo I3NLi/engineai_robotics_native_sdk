@@ -72,6 +72,8 @@ class RlDanceExampleRunner : public MotionRunner {
   int previous_motion_select_button_ = -1;
   bool previous_pause_button_ = false;
   bool trajectory_paused_ = false;
+  bool waiting_for_motion_select_release_ = false;
+  bool motion_selected_since_enter_ = false;
   int trajectory_blend_step_ = 0;
   int trajectory_blend_steps_ = 0;
 
