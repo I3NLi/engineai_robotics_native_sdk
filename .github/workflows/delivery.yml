@@ -1,0 +1,97 @@
+name: Build Delivery Branch
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      delivery_tag_suffix:
+        description: Optional suffix appended to the generated delivery git tag.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: delivery-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DELIVERY_BRANCH: delivery
+  DELIVERY_DIR: /tmp/engineai_robotics_delivery
+
+jobs:
+  build-delivery:
+    name: Build and publish compiled delivery branch
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/engineai-robotics/engineai_robotics_env:latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute delivery tag
+        shell: bash
+        env:
+          DELIVERY_TAG_SUFFIX: ${{ github.event.inputs.delivery_tag_suffix }}
+        run: |
+          set -euo pipefail
+
+          sanitize_tag_part() {
+            printf '%s' "$1" \
+              | sed -E 's#[/[:space:]]+#-#g; s#[^A-Za-z0-9._-]##g; s#-+#-#g; s#^-##; s#-$##'
+          }
+
+          source_slug="$(sanitize_tag_part "${GITHUB_REF_NAME:-unknown}")"
+          if [[ -z "${source_slug}" ]]; then
+            source_slug="unknown"
+          fi
+
+          short_sha="${GITHUB_SHA:0:12}"
+          delivery_tag="delivery/${source_slug}/${short_sha}-run${GITHUB_RUN_ID}-attempt${GITHUB_RUN_ATTEMPT}"
+
+          suffix="$(sanitize_tag_part "${DELIVERY_TAG_SUFFIX:-}")"
+          if [[ -n "${suffix}" ]]; then
+            delivery_tag="${delivery_tag}-${suffix}"
+          fi
+
+          echo "DELIVERY_TAG=${delivery_tag}" >> "${GITHUB_ENV}"
+          echo "Delivery tag: ${delivery_tag}"
+
+      - name: Build release binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}"
+          ./build.sh -t release -j "$(nproc)"
+          ./scripts/build_mujoco.sh
+
+      - name: Assemble delivery payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/package_delivery.sh "${DELIVERY_DIR}"
+
+      - name: Publish delivery branch and tag
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd "${DELIVERY_DIR}"
+
+          git init
+          git checkout -b "${DELIVERY_BRANCH}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "delivery: ${GITHUB_SHA}"
+          git tag -a "${DELIVERY_TAG}" -m "delivery: ${GITHUB_SHA}"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin "HEAD:${DELIVERY_BRANCH}"
+          git push origin "refs/tags/${DELIVERY_TAG}"

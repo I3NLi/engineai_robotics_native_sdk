@@ -142,6 +142,42 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 ![虚拟手柄界面](docs/virtual_gamepad.png)
 
+##### Delivery 分支运行
+
+`delivery` 分支用于交付运行，不需要重新编译。该分支只包含已编译二进制、运行资产、脚本和文档，不包含 C/C++ 源码和已安装头文件。
+
+从 `delivery` 分支运行 T800 仿真时，按以下顺序启动：
+
+```bash
+# 终端 1：启动 MuJoCo
+./scripts/run_mujoco.sh t800
+
+# 终端 2：启动 SDK executor
+./run.sh t800
+
+# 终端 3：启动虚拟手柄 UI
+python3 tools/virtual_gamepad/virtual_gamepad.py
+```
+
+如果没有连接实体 F710 接收器，SDK 可能会打印手柄初始化重试信息；使用虚拟手柄时这是正常现象。
+
+在负载较高的工作站上，CPU 资源竞争可能导致仿真或 executor 不稳定。SDK executor 会使用 `assets/config/t800/task_resident/sim.yaml` 和 `assets/config/t800/task_motion/default.yaml` 中配置的 CPU ID，默认是 `1`、`2`、`3`。如果交付运行时使用 CPU 亲和性启动，需要确保 executor 仍然可以使用这些 CPU：
+
+```bash
+# 终端 1：将 MuJoCo 放在独立 CPU 集上
+taskset -c 16-23 ./scripts/run_mujoco.sh t800
+
+# 终端 2：将 SDK executor 放在配置中的控制 CPU 上
+taskset -c 1-3 ./run.sh t800
+
+# 终端 3：将虚拟手柄放在非控制 CPU 上
+taskset -c 30-31 python3 tools/virtual_gamepad/virtual_gamepad.py
+```
+
+如果容器本身使用了 CPU mask，也要把 executor 配置中的 CPU 包含进去，例如 `--cpuset-cpus="1-3,16-31"`。如果把 executor 绑到不包含配置 CPU 的集合上，周期控制线程可能无法启动。同一台主机上同时运行多套 SDK/MuJoCo 时，建议使用独立容器或网络命名空间，避免不同运行实例共享同一组 LCM 运行通道。
+
+T800 交付版的跳舞任务使用已验证的多动作 tracking 策略，包含 `Punch_Swing_L_50hz.npz`、`kick_Turn_50hz.npz`、`riot_combo_50hz.npz` 和 `victory_50hz.npz`。可以通过虚拟手柄的 dance 控件切换动作；软急停仍然是 `LB + RB`。
+
 #### 系统启动
 
 执行 `./run.sh` 或 `./run_robot.sh` 后，系统默认进入 **idle** 状态。`idle` 是机器人上电后的初始安全状态，控制器未激活主动运动控制。

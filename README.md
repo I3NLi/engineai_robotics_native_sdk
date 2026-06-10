@@ -154,6 +154,42 @@ python3 tools/virtual_gamepad/virtual_gamepad.py
 
 ![Virtual Gamepad Interface](docs/virtual_gamepad.png)
 
+##### Delivery Branch Runtime
+
+The `delivery` branch is generated for runtime delivery only. It contains compiled binaries, runtime assets, scripts, and documentation, but intentionally excludes C/C++ source code and installed headers.
+
+For a T800 simulation runtime from the `delivery` branch, start the components in this order:
+
+```bash
+# Terminal 1: start MuJoCo
+./scripts/run_mujoco.sh t800
+
+# Terminal 2: start the SDK executor
+./run.sh t800
+
+# Terminal 3: start the virtual gamepad UI
+python3 tools/virtual_gamepad/virtual_gamepad.py
+```
+
+If there is no physical F710 receiver attached, the SDK may print a gamepad initialization retry message. This is expected when using the virtual gamepad.
+
+On heavily loaded workstations, CPU contention can make the simulator or executor unstable. The SDK executor uses the CPU IDs configured in `assets/config/t800/task_resident/sim.yaml` and `assets/config/t800/task_motion/default.yaml` (`1`, `2`, and `3` by default). If you start the delivery runtime with CPU affinity, keep those CPU IDs available to the executor:
+
+```bash
+# Terminal 1: keep MuJoCo on a separate CPU set
+taskset -c 16-23 ./scripts/run_mujoco.sh t800
+
+# Terminal 2: keep the SDK executor on the configured control CPUs
+taskset -c 1-3 ./run.sh t800
+
+# Terminal 3: keep the virtual gamepad on non-control CPUs
+taskset -c 30-31 python3 tools/virtual_gamepad/virtual_gamepad.py
+```
+
+If the container itself is started with a CPU mask, include the configured executor CPUs in that mask, for example `--cpuset-cpus="1-3,16-31"`. Binding the executor to a CPU set that excludes the configured task CPUs can prevent periodic control threads from starting. When running multiple SDK/MuJoCo instances on one host, prefer separate containers or network namespaces so that LCM traffic from different runs does not share the same runtime channel.
+
+The T800 delivery dance task uses the validated multi-motion tracking policy and includes `Punch_Swing_L_50hz.npz`, `kick_Turn_50hz.npz`, `riot_combo_50hz.npz`, and `victory_50hz.npz`. Use the virtual gamepad dance controls to switch motions; soft emergency fallback remains `LB + RB`.
+
 #### System Startup
 
 After executing `./run.sh` or `./run_robot.sh`, the system enters the **idle** state by default. `idle` is the initial safe state after the robot is powered on — the controller does not activate active motion control.
