@@ -9,6 +9,7 @@ This branch is generated automatically by GitHub Actions.
 - Delivery tag: delivery/main/5f18b56e58a7-run27253361762-attempt1
 - Workflow run: https://github.com/I3NLi/engineai_robotics_native_sdk/actions/runs/27253361762
 - Build type: release
+- Runtime hotfix: T800 dance runner binary restored from stable source commit 4f12f545e92ab179f773118680ce4a3120595c9c.
 
 ## Included runtime content
 
@@ -30,4 +31,3 @@ The delivery branch intentionally excludes C/C++ source trees and build definiti
 - `policy.mnn`
 
 - `policy.mnn` sha256: `2e39f816cfd83377c084bf6a143e0eeb0b4d812061ab626181838bf649ff2caf`
-
