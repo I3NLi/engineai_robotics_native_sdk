@@ -42,6 +42,9 @@ SDK. For T800 delivery validation, use the state macros first:
 | dance | `RB + B` |
 
 The `dance` macro enters the dance state and starts the default Punch motion.
+Release `LB`/`RB` before selecting a dance motion. Press `BACK` to pause or
+resume playback, and use `LB + RB` for the soft emergency fallback to `passive`.
+
 Use the motion controls below to switch motions:
 
 | Motion | Macro |
@@ -61,6 +64,11 @@ Use the motion controls below to switch motions:
 | Riot Combo 0.8x | `X + D-pad Right` |
 | Riot Combo 0.9x | `X + D-pad Down` |
 | Riot Combo 1.0x | `X + START` |
+
+The delivered T800 policy is a multi-motion tracking policy for simulation
+validation and integration testing. Training time is still limited, so start
+with Punch and the 0.5x variants before trying faster Kick Turn or Riot Combo
+variants.
 
 ## License
 

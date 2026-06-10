@@ -176,7 +176,39 @@ taskset -c 30-31 python3 tools/virtual_gamepad/virtual_gamepad.py
 
 如果容器本身使用了 CPU mask，也要把 executor 配置中的 CPU 包含进去，例如 `--cpuset-cpus="1-3,16-31"`。如果把 executor 绑到不包含配置 CPU 的集合上，周期控制线程可能无法启动。同一台主机上同时运行多套 SDK/MuJoCo 时，建议使用独立容器或网络命名空间，避免不同运行实例共享同一组 LCM 运行通道。
 
-T800 交付版的跳舞任务使用已验证的多动作 tracking 策略，包含 `Punch_Swing_L_50hz.npz`、`kick_Turn_50hz.npz`、`riot_combo_50hz.npz` 和 `victory_50hz.npz`。进入 `dance` 会默认启动 Punch 动作；随后可以通过虚拟手柄的 dance 控件切换到 Punch、Kick Turn、Riot Combo 或 Victory。软急停仍然是 `LB + RB`。
+##### T800 Dance 使用说明
+
+T800 交付版的跳舞任务使用一套多动作 tracking 策略 `rl_dance_example/policies/policy.mnn`，跟踪随包交付的参考轨迹：`Punch_Swing_L_50hz.npz`、`kick_Turn_50hz.npz`、`riot_combo_50hz.npz` 和 `victory_50hz.npz`。策略负责跟踪当前选中的参考动作；虚拟手柄用于切换参考轨迹和速度档位。
+
+推荐操作流程：
+
+1. 先按 `LB + A` 进入 `pd_stand`，等机器人站稳。
+2. 再按 `RB + B` 进入 `dance`。进入后会立即默认启动 Punch 动作。
+3. 松开 `LB`/`RB` 后，再使用 dance 控件切换动作。
+4. 在 `dance` 下按 `BACK` 可以暂停或继续播放。
+5. 任意状态下按 `LB + RB` 可软急停回到 `passive`。
+
+Dance 控件：
+
+| 动作 | 控制 |
+|:-----|:-----|
+| 暂停 / 继续 | `BACK` |
+| Punch | `A` |
+| Victory | `Y` |
+| Kick Turn 0.5x | `B` |
+| Kick Turn 0.6x | `B + D-pad Up` |
+| Kick Turn 0.7x | `B + D-pad Left` |
+| Kick Turn 0.8x | `B + D-pad Right` |
+| Kick Turn 0.9x | `B + D-pad Down` |
+| Kick Turn 1.0x | `B + START` |
+| Riot Combo 0.5x | `X` |
+| Riot Combo 0.6x | `X + D-pad Up` |
+| Riot Combo 0.7x | `X + D-pad Left` |
+| Riot Combo 0.8x | `X + D-pad Right` |
+| Riot Combo 0.9x | `X + D-pad Down` |
+| Riot Combo 1.0x | `X + START` |
+
+训练说明：当前交付策略主要用于仿真验证和联调，训练时间还不够，鲁棒性和动作完成度还不是最终效果，尤其是较高速的 Kick Turn 和 Riot Combo。建议先从 Punch 和 0.5x 速度档验证，动作稳定后再逐步提高速度。
 
 #### 系统启动
 

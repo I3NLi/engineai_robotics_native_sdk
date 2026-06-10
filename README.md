@@ -188,7 +188,39 @@ taskset -c 30-31 python3 tools/virtual_gamepad/virtual_gamepad.py
 
 If the container itself is started with a CPU mask, include the configured executor CPUs in that mask, for example `--cpuset-cpus="1-3,16-31"`. Binding the executor to a CPU set that excludes the configured task CPUs can prevent periodic control threads from starting. When running multiple SDK/MuJoCo instances on one host, prefer separate containers or network namespaces so that LCM traffic from different runs does not share the same runtime channel.
 
-The T800 delivery dance task uses the validated multi-motion tracking policy and includes `Punch_Swing_L_50hz.npz`, `kick_Turn_50hz.npz`, `riot_combo_50hz.npz`, and `victory_50hz.npz`. Entering `dance` starts the default Punch motion; you can then switch to Punch, Kick Turn, Riot Combo, or Victory from the virtual gamepad dance controls. Soft emergency fallback remains `LB + RB`.
+##### T800 Dance Runtime
+
+The T800 delivery dance task uses one multi-motion tracking policy, `rl_dance_example/policies/policy.mnn`, to track the packaged reference trajectories: `Punch_Swing_L_50hz.npz`, `kick_Turn_50hz.npz`, `riot_combo_50hz.npz`, and `victory_50hz.npz`. The policy tracks the selected reference motion; the virtual gamepad switches the active reference trajectory and speed variant.
+
+Recommended flow:
+
+1. Switch to `pd_stand` with `LB + A` and wait until the robot is stable.
+2. Enter `dance` with `RB + B`. The runner starts the default Punch motion immediately.
+3. Release `LB`/`RB`, then use the dance controls to switch motions.
+4. Press `BACK` to pause or resume dance playback.
+5. Use `LB + RB` at any time for the soft emergency fallback to `passive`.
+
+Dance controls:
+
+| Motion | Control |
+|:-------|:--------|
+| Pause / resume | `BACK` |
+| Punch | `A` |
+| Victory | `Y` |
+| Kick Turn 0.5x | `B` |
+| Kick Turn 0.6x | `B + D-pad Up` |
+| Kick Turn 0.7x | `B + D-pad Left` |
+| Kick Turn 0.8x | `B + D-pad Right` |
+| Kick Turn 0.9x | `B + D-pad Down` |
+| Kick Turn 1.0x | `B + START` |
+| Riot Combo 0.5x | `X` |
+| Riot Combo 0.6x | `X + D-pad Up` |
+| Riot Combo 0.7x | `X + D-pad Left` |
+| Riot Combo 0.8x | `X + D-pad Right` |
+| Riot Combo 0.9x | `X + D-pad Down` |
+| Riot Combo 1.0x | `X + START` |
+
+Training note: this delivery policy is intended for simulation validation and integration testing. The current training time is still not enough for final-quality robustness, especially on faster Kick Turn and Riot Combo variants. Start with Punch and the 0.5x variants, then increase speed after the motion is stable.
 
 #### System Startup
 
