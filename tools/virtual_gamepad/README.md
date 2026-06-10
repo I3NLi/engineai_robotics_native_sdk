@@ -41,8 +41,8 @@ SDK. For T800 delivery validation, use the state macros first:
 | walk | `LB + B` |
 | dance | `RB + B` |
 
-The `dance` macro only enters the dance state. The runner holds the current pose
-until a motion below is selected:
+The `dance` macro enters the dance state and starts the default Punch motion.
+Use the motion controls below to switch motions:
 
 | Motion | Macro |
 |:-------|:------|
