@@ -1,0 +1,64 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from interface_protocol/srv/JointMotionPlanRequest.srv
+// generated code does not contain a copyright notice
+
+
+module interface_protocol {
+  module srv {
+    module JointMotionPlanRequest_Request_Constants {
+      @verbatim (language="comment", text=
+        "规划并执行")
+      const uint8 REQUEST_PLAN_EXECUTE = 0;
+      @verbatim (language="comment", text=
+        "取消当前执行")
+      const uint8 REQUEST_CANCEL = 1;
+      @verbatim (language="comment", text=
+        "复位到默认位姿")
+      const uint8 REQUEST_RESET = 2;
+    };
+    @verbatim (language="comment", text=
+      "规划请求服务定义" "\n"
+      "request_type 常量定义")
+    struct JointMotionPlanRequest_Request {
+      uint8 request_type;
+
+      @verbatim (language="comment", text=
+        "运动目标")
+      boolean use_gravity_compensation;
+
+      @verbatim (language="comment", text=
+        "空数组表示复位到默认位置")
+      sequence<int32> joint_indices;
+
+      @verbatim (language="comment", text=
+        "目标关节位置 (rad)")
+      sequence<double> target_positions;
+
+      @verbatim (language="comment", text=
+        "目标关节速度，可为空表示自动规划")
+      sequence<double> target_velocities;
+
+      @verbatim (language="comment", text=
+        "规划期望执行时长 (s)")
+      double execution_time;
+
+      @verbatim (language="comment", text=
+        "可选，空数组表示默认")
+      sequence<double> stiffness;
+
+      @verbatim (language="comment", text=
+        "可选，空数组表示默认")
+      sequence<double> damping;
+    };
+    struct JointMotionPlanRequest_Response {
+      @verbatim (language="comment", text=
+        "响应" "\n"
+        "是否成功接受请求")
+      boolean success;
+
+      @verbatim (language="comment", text=
+        "错误或成功信息")
+      string message;
+    };
+  };
+};

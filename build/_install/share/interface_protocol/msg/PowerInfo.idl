@@ -1,0 +1,22 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from interface_protocol/msg/PowerInfo.msg
+// generated code does not contain a copyright notice
+
+
+module interface_protocol {
+  module msg {
+    struct PowerInfo {
+      boolean enable;
+
+      float percentage;
+
+      float voltage;
+
+      float current;
+
+      float current_limit;
+
+      int32 error_code;
+    };
+  };
+};

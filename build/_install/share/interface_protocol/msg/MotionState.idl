@@ -1,0 +1,14 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from interface_protocol/msg/MotionState.msg
+// generated code does not contain a copyright notice
+
+
+module interface_protocol {
+  module msg {
+    struct MotionState {
+      string current_motion_task;
+
+      sequence<string> available_transition_motions;
+    };
+  };
+};

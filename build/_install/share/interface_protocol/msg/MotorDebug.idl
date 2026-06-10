@@ -1,0 +1,24 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from interface_protocol/msg/MotorDebug.msg
+// generated code does not contain a copyright notice
+
+
+module interface_protocol {
+  module msg {
+    struct MotorDebug {
+      sequence<float> mos_temperature;
+
+      sequence<float> motor_temperature;
+
+      sequence<float> voltage;
+
+      sequence<float> current;
+
+      sequence<int32> error_code;
+
+      sequence<uint8> offline;
+
+      sequence<uint8> enable;
+    };
+  };
+};
