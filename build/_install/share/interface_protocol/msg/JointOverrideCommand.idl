@@ -1,0 +1,29 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from interface_protocol/msg/JointOverrideCommand.msg
+// generated code does not contain a copyright notice
+
+#include "std_msgs/msg/Header.idl"
+
+module interface_protocol {
+  module msg {
+    struct JointOverrideCommand {
+      std_msgs::msg::Header header;
+
+      double weight;
+
+      sequence<int32> joint_indices;
+
+      sequence<double> position;
+
+      sequence<double> velocity;
+
+      sequence<double> feed_forward_torque;
+
+      sequence<double> torque;
+
+      sequence<double> stiffness;
+
+      sequence<double> damping;
+    };
+  };
+};

@@ -1,0 +1,12 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from interface_protocol/msg/MotionStateRequest.msg
+// generated code does not contain a copyright notice
+
+
+module interface_protocol {
+  module msg {
+    struct MotionStateRequest {
+      string target_motion_name;
+    };
+  };
+};

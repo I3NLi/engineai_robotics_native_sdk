@@ -1,0 +1,14 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from interface_protocol/msg/NodeControl.msg
+// generated code does not contain a copyright notice
+
+
+module interface_protocol {
+  module msg {
+    struct NodeControl {
+      string node_name;
+
+      boolean command;
+    };
+  };
+};
