@@ -139,9 +139,12 @@ bool RlDanceExampleRunner::Enter() {
   // Pre-fill observation context fields that remain constant throughout execution
   fillObsContextConstantPart();
   obs_ctx_.reference_velocity_zero = trajectory_paused_;
+  if (!motion_selected_since_enter_) {
+    SendHoldCurrentPositionCommand();
+  }
 
   if (trajectory_paused_) {
-    LOG(INFO) << "[WbtRunner::Enter] Dance entered in paused selection mode; choose a motion to start playback.";
+    LOG(INFO) << "[WbtRunner::Enter] Dance entered in hold selection mode; choose a motion to start playback.";
   }
 
   LOG(INFO) << "[WbtRunner::Enter] Done, obs_dim=" << total_obs_dim << ", actions=" << param_->num_actions
@@ -430,6 +433,11 @@ bool RlDanceExampleRunner::LoadPolicy(const std::string& policy_file) {
  */
 void RlDanceExampleRunner::Run() {
   UpdateTrajectorySelectionFromGamepad();
+  if (!motion_selected_since_enter_) {
+    SendHoldCurrentPositionCommand();
+    return;
+  }
+
   obs_ctx_.reference_velocity_zero = trajectory_paused_;
   CalculateObservation();   // Assemble observation from registered components
   CalculateMotorCommand();  // Run policy inference and compute target positions
@@ -596,6 +604,13 @@ void RlDanceExampleRunner::SendMotorCommand() {
   qd_des_ = Eigen::VectorXd::Zero(model_param_->num_total_joints);
   tau_ff_des_ = Eigen::VectorXd::Zero(model_param_->num_total_joints);
   GetMutableOutput().SetCommand(q_des_, qd_des_, joint_kp_, joint_kd_, tau_ff_des_);
+}
+
+void RlDanceExampleRunner::SendHoldCurrentPositionCommand() {
+  data_store_->joint_info.GetState(data::JointInfoType::kPosition, q_real_);
+  qd_des_ = Eigen::VectorXd::Zero(model_param_->num_total_joints);
+  tau_ff_des_ = Eigen::VectorXd::Zero(model_param_->num_total_joints);
+  GetMutableOutput().SetCommand(q_real_, qd_des_, joint_kp_, joint_kd_, tau_ff_des_);
 }
 
 // ============================================================================

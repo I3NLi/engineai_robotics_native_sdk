@@ -176,7 +176,7 @@ taskset -c 30-31 python3 tools/virtual_gamepad/virtual_gamepad.py
 
 如果容器本身使用了 CPU mask，也要把 executor 配置中的 CPU 包含进去，例如 `--cpuset-cpus="1-3,16-31"`。如果把 executor 绑到不包含配置 CPU 的集合上，周期控制线程可能无法启动。同一台主机上同时运行多套 SDK/MuJoCo 时，建议使用独立容器或网络命名空间，避免不同运行实例共享同一组 LCM 运行通道。
 
-T800 交付版的跳舞任务使用已验证的多动作 tracking 策略，包含 `Punch_Swing_L_50hz.npz`、`kick_Turn_50hz.npz`、`riot_combo_50hz.npz` 和 `victory_50hz.npz`。进入 `dance` 只会让 dance runner 就绪，默认暂停等待动作选择；随后可以通过虚拟手柄的 dance 控件选择 Punch、Kick Turn、Riot Combo 或 Victory。软急停仍然是 `LB + RB`。
+T800 交付版的跳舞任务使用已验证的多动作 tracking 策略，包含 `Punch_Swing_L_50hz.npz`、`kick_Turn_50hz.npz`、`riot_combo_50hz.npz` 和 `victory_50hz.npz`。进入 `dance` 只会让 dance runner 就绪，默认保持当前姿态等待动作选择；随后可以通过虚拟手柄的 dance 控件选择 Punch、Kick Turn、Riot Combo 或 Victory。软急停仍然是 `LB + RB`。
 
 #### 系统启动
 

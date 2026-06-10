@@ -44,6 +44,7 @@ class RlDanceExampleRunner : public MotionRunner {
   void CalculateObservation();
   void CalculateMotorCommand();
   void SendMotorCommand();
+  void SendHoldCurrentPositionCommand();
   void initHistoryBuffers();
   void fillObsContextConstantPart();
   void updateFirstFrameYawAlignment();
