@@ -28,6 +28,7 @@
  *   - Joint name ordering in `joint_names` must match the policy training configuration.
  */
 
+#include "math/mnn_model.h"
 #include "rl_dance_example/rl_dance_example_runner.h"
 
 #include <algorithm>
@@ -36,9 +37,18 @@
 #include <glog/logging.h>
 
 #include "math/rotation_matrix.h"
+#include "pd_stand_param/pd_stand_param.h"
 #include "rl_dance_example/wbt_obs_registry.h"
+#include "tool/concatenate_vector.h"
 
 namespace runner {
+namespace {
+
+constexpr int kDefaultMotionAutoStartWaitSteps = 50;
+
+}  // namespace
+
+RlDanceExampleRunner::~RlDanceExampleRunner() = default;
 
 // ============================================================================
 // Runner Lifecycle Methods
@@ -101,6 +111,20 @@ bool RlDanceExampleRunner::Enter() {
   (*default_joint_q_)(*policy2deploy_joint_idx_) = param_->default_joint_pos;
   action_scale_ = param_->action_scale;
 
+  hold_joint_kp_ = joint_kp_;
+  hold_joint_kd_ = joint_kd_;
+  auto pd_stand_param = data::ParamManager::create<data::PdStandParam>();
+  if (pd_stand_param) {
+    const Eigen::VectorXd pd_stand_kp = common::ConcatenateVectors(pd_stand_param->stiffness);
+    const Eigen::VectorXd pd_stand_kd = common::ConcatenateVectors(pd_stand_param->damping);
+    if (pd_stand_kp.size() == model_param_->num_total_joints && pd_stand_kd.size() == model_param_->num_total_joints) {
+      hold_joint_kp_ = pd_stand_kp;
+      hold_joint_kd_ = pd_stand_kd;
+    } else {
+      LOG(WARNING) << "[WbtRunner::Enter] pd_stand hold gains size mismatch; using dance gains for hold.";
+    }
+  }
+
   // --- Step 3: Load the default MLP policy network ---
   if (!LoadPolicy(param_->policy_file)) {
     return false;
@@ -110,6 +134,9 @@ bool RlDanceExampleRunner::Enter() {
   int total_obs_dim = ComputeTotalObservationDim();
   mlp_net_observation_vec.setZero(total_obs_dim);
   mlp_net_action_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
+  exec_error_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
+  prev_exec_error_ = std::make_shared<Eigen::VectorXd>(Eigen::VectorXd::Zero(param_->num_actions));
+  last_target_joint_pos_ = Eigen::VectorXd::Zero(param_->num_actions);
 
   // --- Step 4: Initialize observation history buffers ---
   // Each observation component has its own sliding-window history buffer
@@ -131,10 +158,14 @@ bool RlDanceExampleRunner::Enter() {
   policy_phase_ = 0.0;
   previous_pause_button_ = false;
   previous_motion_select_button_ = -1;
-  trajectory_paused_ = trajectories_.size() > 1;
-  waiting_for_motion_select_release_ = trajectory_paused_;
-  motion_selected_since_enter_ = !trajectory_paused_;
+  const bool has_motion_selector = trajectories_.size() > 1;
+  trajectory_paused_ = has_motion_selector;
+  waiting_for_motion_select_release_ = has_motion_selector;
+  motion_selected_since_enter_ = !has_motion_selector;
+  motion_select_auto_start_countdown_ = 0;
   GetMutableOutput().Reset();
+  data_store_->joint_info.GetState(data::JointInfoType::kPosition, hold_joint_q_);
+  ResetExecutionErrorStateToCurrent();
 
   // Pre-fill observation context fields that remain constant throughout execution
   fillObsContextConstantPart();
@@ -143,7 +174,7 @@ bool RlDanceExampleRunner::Enter() {
     SendHoldCurrentPositionCommand();
   }
 
-  if (trajectory_paused_) {
+  if (has_motion_selector) {
     LOG(INFO) << "[WbtRunner::Enter] Dance entered in hold selection mode; choose a motion to start playback.";
   }
 
@@ -170,6 +201,8 @@ void RlDanceExampleRunner::fillObsContextConstantPart() {
   obs_ctx_.default_joint_q = default_joint_q_;
   obs_ctx_.policy2deploy_joint_idx = policy2deploy_joint_idx_;
   obs_ctx_.actions = mlp_net_action_;
+  obs_ctx_.exec_error = exec_error_;
+  obs_ctx_.prev_exec_error = prev_exec_error_;
 }
 
 bool RlDanceExampleRunner::LoadTrajectories() {
@@ -192,6 +225,16 @@ bool RlDanceExampleRunner::LoadTrajectories() {
     trajectory_speed_scales = *param_->trajectory_speed_scales;
   }
 
+  std::vector<int> trajectory_resident_controls;
+  if (param_->trajectory_resident_controls && !param_->trajectory_resident_controls->empty()) {
+    trajectory_resident_controls = *param_->trajectory_resident_controls;
+  }
+
+  std::vector<int> trajectory_start_steps;
+  if (param_->trajectory_start_steps && !param_->trajectory_start_steps->empty()) {
+    trajectory_start_steps = *param_->trajectory_start_steps;
+  }
+
   trajectories_.reserve(trajectory_files.size());
   for (size_t i = 0; i < trajectory_files.size(); ++i) {
     const std::string& trajectory_file = trajectory_files[i];
@@ -205,11 +248,15 @@ bool RlDanceExampleRunner::LoadTrajectories() {
         i < trajectory_policy_files.size() && !trajectory_policy_files[i].empty() ? trajectory_policy_files[i]
                                                                                   : param_->policy_file;
     trajectory.speed_scale = i < trajectory_speed_scales.size() ? trajectory_speed_scales[i] : 1.0;
+    trajectory.resident_control =
+        i < trajectory_resident_controls.size() ? trajectory_resident_controls[i] != 0 : param_->resident_control;
+    trajectory.start_step = i < trajectory_start_steps.size() ? std::max(0, trajectory_start_steps[i]) : 0;
     trajectory.joint_pos_all = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["joint_pos"]));
     trajectory.joint_vel_all =
         std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["joint_vel"]) * trajectory.speed_scale);
     trajectory.body_quat_w_all = std::make_shared<const Eigen::MatrixXd>(npyFloatToMatrixXd(npz["body_quat_w"]));
     trajectory.max_policy_step = trajectory.joint_pos_all->rows() - 1;
+    trajectory.start_step = std::min(trajectory.start_step, trajectory.max_policy_step);
 
     if (trajectory.joint_pos_all->cols() != param_->num_actions ||
         trajectory.joint_vel_all->cols() != param_->num_actions || trajectory.body_quat_w_all->cols() != 4) {
@@ -241,7 +288,11 @@ void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_sta
   Eigen::VectorXd blend_from_joint_pos;
   Eigen::VectorXd blend_from_joint_vel;
   Eigen::Vector4d blend_from_body_quat_w = Eigen::Vector4d::Zero();
-  if (reset_state && ref_joint_pos_all_ && ref_joint_vel_all_ && ref_body_quat_w_all_) {
+  if (reset_state && !motion_selected_since_enter_ && hold_joint_q_.size() == model_param_->num_total_joints &&
+      policy2deploy_joint_idx_) {
+    blend_from_joint_pos = hold_joint_q_(*policy2deploy_joint_idx_);
+    blend_from_joint_vel = Eigen::VectorXd::Zero(param_->num_actions);
+  } else if (reset_state && ref_joint_pos_all_ && ref_joint_vel_all_ && ref_body_quat_w_all_) {
     const int old_ref_step = std::min(policy_step, max_policy_step);
     blend_from_joint_pos = GetReferenceJointPosition(old_ref_step);
     blend_from_joint_vel = ref_joint_vel_all_->row(old_ref_step);
@@ -257,6 +308,7 @@ void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_sta
 
   active_trajectory_index_ = trajectory_index;
   active_trajectory_speed_scale_ = std::max(0.05, trajectory.speed_scale);
+  active_resident_control_ = trajectory.resident_control;
   ref_joint_pos_all_ = trajectory.joint_pos_all;
   ref_joint_vel_all_ = trajectory.joint_vel_all;
   ref_body_quat_w_all_ = trajectory.body_quat_w_all;
@@ -267,12 +319,13 @@ void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_sta
   obs_ctx_.ref_body_quat_w_all = ref_body_quat_w_all_;
 
   if (reset_state) {
-    policy_step = 0;
-    policy_phase_ = 0.0;
+    policy_step = trajectory.start_step;
+    policy_phase_ = static_cast<double>(policy_step);
     is_first_time_ = true;
     trajectory_paused_ = false;
     obs_ctx_.reference_velocity_zero = false;
     mlp_net_action_->setZero();
+    ResetExecutionErrorStateToCurrent();
     for (Eigen::MatrixXd& buffer : observation_history_buffers_) {
       buffer.setZero();
     }
@@ -288,6 +341,7 @@ void RlDanceExampleRunner::SelectTrajectory(int trajectory_index, bool reset_sta
 
   LOG(INFO) << "[WbtRunner::SelectTrajectory] Active trajectory " << active_trajectory_index_ << ": "
             << trajectory.file << ", policy=" << active_policy_file_ << ", speed=" << active_trajectory_speed_scale_
+            << ", resident_control=" << active_resident_control_ << ", start_step=" << trajectory.start_step
             << ", frames=" << trajectory.joint_pos_all->rows();
 }
 
@@ -309,7 +363,12 @@ void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
       return;
     }
     waiting_for_motion_select_release_ = false;
-    LOG(INFO) << "[WbtRunner::Enter] Motion selection controls released; waiting for operator motion choice.";
+    if (!motion_selected_since_enter_) {
+      motion_select_auto_start_countdown_ = kDefaultMotionAutoStartWaitSteps;
+      LOG(INFO) << "[WbtRunner::Enter] Motion selection controls released; waiting briefly for operator motion choice.";
+      return;
+    }
+    LOG(INFO) << "[WbtRunner::Enter] Motion selection controls released; motion switching enabled.";
     return;
   }
 
@@ -337,7 +396,19 @@ void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
   }
 
   int selected = -1;
-  if (gamepad_info->B && gamepad_info->CROSS_X > 0) {
+  if (trajectories_.size() == 5) {
+    if (gamepad_info->A && gamepad_info->START) {
+      selected = 1;  // Punch FK
+    } else if (gamepad_info->A) {
+      selected = 0;  // Punch
+    } else if (gamepad_info->B) {
+      selected = 2;  // Kick Turn
+    } else if (gamepad_info->X) {
+      selected = 3;  // Riot Combo
+    } else if (gamepad_info->Y) {
+      selected = 4;  // Victory
+    }
+  } else if (gamepad_info->B && gamepad_info->CROSS_X > 0) {
     selected = 2;  // Kick Turn 0.6
   } else if (gamepad_info->B && gamepad_info->CROSS_Y > 0) {
     selected = 3;  // Kick Turn 0.7
@@ -357,6 +428,10 @@ void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
     selected = 11;  // Riot Combo 0.9
   } else if (gamepad_info->X && gamepad_info->START) {
     selected = 12;  // Riot Combo 1.0
+  } else if (gamepad_info->Y && gamepad_info->CROSS_X > 0) {
+    selected = 14;  // Warmup
+  } else if (gamepad_info->Y && gamepad_info->CROSS_Y > 0) {
+    selected = 15;  // Zhiquan
   } else if (gamepad_info->A) {
     selected = 0;  // Punch
   } else if (gamepad_info->B) {
@@ -368,11 +443,22 @@ void RlDanceExampleRunner::UpdateTrajectorySelectionFromGamepad() {
   }
 
   if (selected < 0) {
+    if (!motion_selected_since_enter_ && motion_select_auto_start_countdown_ > 0) {
+      --motion_select_auto_start_countdown_;
+      if (motion_select_auto_start_countdown_ == 0) {
+        SelectTrajectory(active_trajectory_index_, true);
+        motion_selected_since_enter_ = true;
+        trajectory_paused_ = false;
+        obs_ctx_.reference_velocity_zero = false;
+        LOG(INFO) << "[WbtRunner::Enter] Auto-started default motion after selection timeout.";
+      }
+    }
     previous_motion_select_button_ = -1;
     return;
   }
 
   if (selected != previous_motion_select_button_ && selected < static_cast<int>(trajectories_.size())) {
+    motion_select_auto_start_countdown_ = 0;
     SelectTrajectory(selected, true);
     motion_selected_since_enter_ = true;
     trajectory_paused_ = false;
@@ -396,6 +482,35 @@ void RlDanceExampleRunner::UpdateTrajectoryBlend() {
     obs_ctx_.trajectory_blend_from_joint_vel.resize(0);
     obs_ctx_.trajectory_blend_from_body_quat_w.setZero();
   }
+}
+
+void RlDanceExampleRunner::ResetExecutionErrorStateToCurrent() {
+  if (!policy2deploy_joint_idx_ || !exec_error_ || !prev_exec_error_) {
+    return;
+  }
+  Eigen::VectorXd current_q;
+  data_store_->joint_info.GetState(data::JointInfoType::kPosition, current_q);
+  if (current_q.size() == model_param_->num_total_joints) {
+    last_target_joint_pos_ = current_q(*policy2deploy_joint_idx_);
+  } else {
+    last_target_joint_pos_ = Eigen::VectorXd::Zero(param_->num_actions);
+  }
+  exec_error_->setZero();
+  prev_exec_error_->setZero();
+}
+
+void RlDanceExampleRunner::UpdateExecutionErrors() {
+  if (!policy2deploy_joint_idx_ || !exec_error_ || !prev_exec_error_ ||
+      last_target_joint_pos_.size() != param_->num_actions) {
+    return;
+  }
+  Eigen::VectorXd current_q;
+  data_store_->joint_info.GetState(data::JointInfoType::kPosition, current_q);
+  if (current_q.size() != model_param_->num_total_joints) {
+    return;
+  }
+  *prev_exec_error_ = *exec_error_;
+  *exec_error_ = last_target_joint_pos_ - current_q(*policy2deploy_joint_idx_);
 }
 
 Eigen::VectorXd RlDanceExampleRunner::GetReferenceJointPosition(int ref_step) const {
@@ -439,16 +554,18 @@ void RlDanceExampleRunner::Run() {
   }
 
   obs_ctx_.reference_velocity_zero = trajectory_paused_;
+  UpdateExecutionErrors();
   CalculateObservation();   // Assemble observation from registered components
   CalculateMotorCommand();  // Run policy inference and compute target positions
   SendMotorCommand();       // Send PD commands to motors
+  const bool was_blending = obs_ctx_.trajectory_blend_active;
   if (!trajectory_paused_) {
     UpdateTrajectoryBlend();
   }
 
   // Advance trajectory frame and loop back to the start.
   // policy_step = (policy_step >= max_policy_step) ? 0 : policy_step + 1;
-  if (!trajectory_paused_) {
+  if (!trajectory_paused_ && !was_blending) {
     policy_phase_ = std::min(policy_phase_ + active_trajectory_speed_scale_, static_cast<double>(max_policy_step));
     policy_step = std::min(static_cast<int>(std::floor(policy_phase_)), max_policy_step);
   }
@@ -584,7 +701,7 @@ void RlDanceExampleRunner::CalculateMotorCommand() {
   //   q_des = ref_joint_pos + action * action_scale (for policy-controlled joints only)
 
   q_des_ = *default_joint_q_;
-  if (param_->resident_control) {
+  if (active_resident_control_) {
     const int ref_step = std::min(policy_step, max_policy_step);
     const Eigen::VectorXd ref_joint_pos = GetReferenceJointPosition(ref_step);
     const Eigen::VectorXd scaled_action = mlp_net_action_->cwiseProduct(action_scale_);
@@ -592,6 +709,14 @@ void RlDanceExampleRunner::CalculateMotorCommand() {
   } else {
     q_des_(*policy2deploy_joint_idx_) += mlp_net_action_->cwiseProduct(action_scale_);
   }
+
+  if (obs_ctx_.trajectory_blend_active &&
+      obs_ctx_.trajectory_blend_from_joint_pos.size() == static_cast<int>(param_->num_actions)) {
+    const double alpha = obs_ctx_.trajectory_blend_alpha;
+    q_des_(*policy2deploy_joint_idx_) =
+        (1.0 - alpha) * obs_ctx_.trajectory_blend_from_joint_pos + alpha * q_des_(*policy2deploy_joint_idx_);
+  }
+  last_target_joint_pos_ = q_des_(*policy2deploy_joint_idx_);
 }
 
 /**
@@ -607,10 +732,14 @@ void RlDanceExampleRunner::SendMotorCommand() {
 }
 
 void RlDanceExampleRunner::SendHoldCurrentPositionCommand() {
-  data_store_->joint_info.GetState(data::JointInfoType::kPosition, q_real_);
+  if (hold_joint_q_.size() != model_param_->num_total_joints) {
+    data_store_->joint_info.GetState(data::JointInfoType::kPosition, hold_joint_q_);
+  }
   qd_des_ = Eigen::VectorXd::Zero(model_param_->num_total_joints);
   tau_ff_des_ = Eigen::VectorXd::Zero(model_param_->num_total_joints);
-  GetMutableOutput().SetCommand(q_real_, qd_des_, joint_kp_, joint_kd_, tau_ff_des_);
+  const Eigen::VectorXd& hold_kp = hold_joint_kp_.size() == model_param_->num_total_joints ? hold_joint_kp_ : joint_kp_;
+  const Eigen::VectorXd& hold_kd = hold_joint_kd_.size() == model_param_->num_total_joints ? hold_joint_kd_ : joint_kd_;
+  GetMutableOutput().SetCommand(hold_joint_q_, qd_des_, hold_kp, hold_kd, tau_ff_des_);
 }
 
 // ============================================================================

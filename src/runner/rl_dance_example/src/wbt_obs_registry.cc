@@ -36,6 +36,56 @@ static void ComputeImuInBody(const ObsContext& ctx, Eigen::Matrix3d* R_real, Eig
   *projected_gravity = -R_real->transpose() * Eigen::Vector3d::UnitZ();
 }
 
+static Eigen::VectorXd GetPolicyJointPosition(const ObsContext& ctx) {
+  if (!ctx.data_store || !ctx.policy2deploy_joint_idx) {
+    LOG(ERROR) << "[obs] data_store or policy2deploy_joint_idx is null";
+    return Eigen::VectorXd();
+  }
+  int n = ctx.data_store->model_param->num_total_joints;
+  Eigen::VectorXd q_real(n);
+  ctx.data_store->joint_info.GetState(data::JointInfoType::kPosition, q_real);
+  Eigen::VectorXd upper_limit(n), lower_limit(n);
+  ctx.data_store->joint_info.GetUpperPositionLimit(upper_limit);
+  ctx.data_store->joint_info.GetLowerPositionLimit(lower_limit);
+  q_real = q_real.cwiseMax(lower_limit).cwiseMin(upper_limit);
+  return q_real(*ctx.policy2deploy_joint_idx);
+}
+
+static Eigen::VectorXd GetReferenceJointPosition(const ObsContext& ctx) {
+  if (!ctx.ref_joint_pos_all) {
+    LOG(ERROR) << "[obs] ref_joint_pos_all is null";
+    return Eigen::VectorXd();
+  }
+  int r = ctx.ref_joint_pos_all->rows();
+  int step = r > 0 ? std::min(ctx.policy_step + ctx.future_cmd_step, r - 1) : 0;
+  Eigen::VectorXd ref_pos = ctx.ref_joint_pos_all->row(step);
+  if (ctx.trajectory_blend_active && ctx.trajectory_blend_from_joint_pos.size() == ref_pos.size()) {
+    const double alpha = std::clamp(ctx.trajectory_blend_alpha, 0.0, 1.0);
+    ref_pos = (1.0 - alpha) * ctx.trajectory_blend_from_joint_pos + alpha * ref_pos;
+  }
+  if (ctx.data_store && ctx.soft_joint_pos_limit && ctx.policy2deploy_joint_idx &&
+      ctx.soft_joint_pos_limit->size() == ref_pos.size()) {
+    int n = ctx.data_store->model_param->num_total_joints;
+    Eigen::VectorXd upper_limit(n), lower_limit(n);
+    ctx.data_store->joint_info.GetUpperPositionLimit(upper_limit);
+    ctx.data_store->joint_info.GetLowerPositionLimit(lower_limit);
+    Eigen::VectorXd upper_policy = upper_limit(*ctx.policy2deploy_joint_idx);
+    Eigen::VectorXd lower_policy = lower_limit(*ctx.policy2deploy_joint_idx);
+    Eigen::VectorXd soft_upper = upper_policy.cwiseProduct(*ctx.soft_joint_pos_limit);
+    Eigen::VectorXd soft_lower = lower_policy.cwiseProduct(*ctx.soft_joint_pos_limit);
+    ref_pos = ref_pos.cwiseMax(soft_lower).cwiseMin(soft_upper);
+  }
+  return ref_pos;
+}
+
+static Eigen::VectorXd GetPolicyDefaultJointPosition(const ObsContext& ctx) {
+  if (!ctx.default_joint_q || !ctx.policy2deploy_joint_idx) {
+    LOG(ERROR) << "[obs] default_joint_q or policy2deploy_joint_idx is null";
+    return Eigen::VectorXd();
+  }
+  return (*ctx.default_joint_q)(*ctx.policy2deploy_joint_idx);
+}
+
 std::unordered_map<std::string, ObsEntry>& GetRegistry() {
   static std::unordered_map<std::string, ObsEntry> registry;
 
@@ -49,28 +99,14 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
           }
           int r = ctx.ref_joint_pos_all->rows();
           int step = r > 0 ? std::min(ctx.policy_step + ctx.future_cmd_step, r - 1) : 0;
-          Eigen::VectorXd ref_pos = ctx.ref_joint_pos_all->row(step);
+          Eigen::VectorXd ref_pos = GetReferenceJointPosition(ctx);
           Eigen::VectorXd ref_vel = ctx.ref_joint_vel_all->row(step);
-          if (ctx.trajectory_blend_active && ctx.trajectory_blend_from_joint_pos.size() == ref_pos.size() &&
-              ctx.trajectory_blend_from_joint_vel.size() == ref_vel.size()) {
+          if (ctx.trajectory_blend_active && ctx.trajectory_blend_from_joint_vel.size() == ref_vel.size()) {
             const double alpha = std::clamp(ctx.trajectory_blend_alpha, 0.0, 1.0);
-            ref_pos = (1.0 - alpha) * ctx.trajectory_blend_from_joint_pos + alpha * ref_pos;
             ref_vel = (1.0 - alpha) * ctx.trajectory_blend_from_joint_vel + alpha * ref_vel;
           }
           if (ctx.reference_velocity_zero) {
             ref_vel.setZero();
-          }
-          if (ctx.data_store && ctx.soft_joint_pos_limit && ctx.policy2deploy_joint_idx &&
-              ctx.soft_joint_pos_limit->size() == ref_pos.size()) {
-            int n = ctx.data_store->model_param->num_total_joints;
-            Eigen::VectorXd upper_limit(n), lower_limit(n);
-            ctx.data_store->joint_info.GetUpperPositionLimit(upper_limit);
-            ctx.data_store->joint_info.GetLowerPositionLimit(lower_limit);
-            Eigen::VectorXd upper_policy = upper_limit(*ctx.policy2deploy_joint_idx);
-            Eigen::VectorXd lower_policy = lower_limit(*ctx.policy2deploy_joint_idx);
-            Eigen::VectorXd soft_upper = upper_policy.cwiseProduct(*ctx.soft_joint_pos_limit);
-            Eigen::VectorXd soft_lower = lower_policy.cwiseProduct(*ctx.soft_joint_pos_limit);
-            ref_pos = ref_pos.cwiseMax(soft_lower).cwiseMin(soft_upper);
           }
           Eigen::VectorXd cmd(ref_pos.size() + ref_vel.size());
           cmd << ref_pos, ref_vel;
@@ -126,18 +162,11 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
     registry["joint_pos"] = {
         [](int na) { return na; },
         [](const ObsContext& ctx) {
-          if (!ctx.data_store || !ctx.default_joint_q || !ctx.policy2deploy_joint_idx) {
+          if (!ctx.default_joint_q) {
             LOG(ERROR) << "[obs:joint_pos] data_store/default_joint_q/policy2deploy_joint_idx is null";
             return Eigen::VectorXd();
           }
-          int n = ctx.data_store->model_param->num_total_joints;
-          Eigen::VectorXd q_real(n);
-          ctx.data_store->joint_info.GetState(data::JointInfoType::kPosition, q_real);
-          Eigen::VectorXd upper_limit(n), lower_limit(n);
-          ctx.data_store->joint_info.GetUpperPositionLimit(upper_limit);
-          ctx.data_store->joint_info.GetLowerPositionLimit(lower_limit);
-          q_real = q_real.cwiseMax(lower_limit).cwiseMin(upper_limit);
-          Eigen::VectorXd out = (q_real - *ctx.default_joint_q)(*ctx.policy2deploy_joint_idx);
+          Eigen::VectorXd out = GetPolicyJointPosition(ctx) - GetPolicyDefaultJointPosition(ctx);
           return out;
         },
     };
@@ -171,6 +200,36 @@ std::unordered_map<std::string, ObsEntry>& GetRegistry() {
             return Eigen::VectorXd();
           }
           return *ctx.actions;
+        },
+    };
+
+    registry["ref_joint_pos_rel"] = {
+        [](int na) { return na; },
+        [](const ObsContext& ctx) { return GetReferenceJointPosition(ctx) - GetPolicyDefaultJointPosition(ctx); },
+    };
+
+    registry["ref_pos_error"] = {
+        [](int na) { return na; },
+        [](const ObsContext& ctx) { return GetReferenceJointPosition(ctx) - GetPolicyJointPosition(ctx); },
+    };
+
+    registry["exec_error"] = {
+        [](int na) { return na; },
+        [](const ObsContext& ctx) -> Eigen::VectorXd {
+          if (!ctx.exec_error || ctx.exec_error->size() != ctx.num_actions) {
+            return Eigen::VectorXd::Zero(ctx.num_actions);
+          }
+          return *ctx.exec_error;
+        },
+    };
+
+    registry["prev_exec_error"] = {
+        [](int na) { return na; },
+        [](const ObsContext& ctx) -> Eigen::VectorXd {
+          if (!ctx.prev_exec_error || ctx.prev_exec_error->size() != ctx.num_actions) {
+            return Eigen::VectorXd::Zero(ctx.num_actions);
+          }
+          return *ctx.prev_exec_error;
         },
     };
 

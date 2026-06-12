@@ -9,7 +9,7 @@ list(APPEND ENGINEAI_ROBOTICS_HARDWARE /opt/engineai_robotics_hardware)
 
 # Set cmake path
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-list(APPEND CMAKE_PREFIX_PATH ${ENGINEAI_ROBOTICS_THIRD_PARTY})
+list(PREPEND CMAKE_PREFIX_PATH ${ENGINEAI_ROBOTICS_THIRD_PARTY})
 
 # Find packages
 find_package(GTest REQUIRED)
@@ -94,4 +94,3 @@ endif()
 
 # Add subdirectories
 add_subdirectory(src)
-

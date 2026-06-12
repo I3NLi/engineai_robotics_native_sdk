@@ -21,6 +21,8 @@ class RlDanceExampleParam : public BasicParam {
   std::optional<std::vector<std::string>> LOAD_PARAM(trajectory_files_npz);
   std::optional<std::vector<std::string>> LOAD_PARAM(trajectory_policy_files);
   std::optional<std::vector<double>> LOAD_PARAM(trajectory_speed_scales);
+  std::optional<std::vector<int>> LOAD_PARAM(trajectory_resident_controls);
+  std::optional<std::vector<int>> LOAD_PARAM(trajectory_start_steps);
 
   std::vector<std::string> LOAD_PARAM(joint_names);
   Eigen::VectorXd LOAD_PARAM(joint_stiffness);

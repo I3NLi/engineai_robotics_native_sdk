@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -9,8 +10,11 @@
 #include "rl_dance_example_param/rl_dance_example_param.h"
 
 #include "cnpy.h"
-#include "math/mnn_model.h"
 #include "parameter/global_config_initializer.h"
+
+namespace math {
+class MNNModel;
+}
 
 namespace runner {
 
@@ -20,7 +24,7 @@ class RlDanceExampleRunner : public MotionRunner {
       : MotionRunner(name, data_store) {
     param_ = data::ParamManager::create<data::RlDanceExampleParam>();
   }
-  ~RlDanceExampleRunner() = default;
+  ~RlDanceExampleRunner();
 
   bool Enter() override;
   void Run() override;
@@ -35,6 +39,8 @@ class RlDanceExampleRunner : public MotionRunner {
     std::string file;
     std::string policy_file;
     double speed_scale = 1.0;
+    bool resident_control = true;
+    int start_step = 0;
     std::shared_ptr<const Eigen::MatrixXd> joint_pos_all;
     std::shared_ptr<const Eigen::MatrixXd> joint_vel_all;
     std::shared_ptr<const Eigen::MatrixXd> body_quat_w_all;
@@ -52,6 +58,8 @@ class RlDanceExampleRunner : public MotionRunner {
   void SelectTrajectory(int trajectory_index, bool reset_state);
   void UpdateTrajectorySelectionFromGamepad();
   void UpdateTrajectoryBlend();
+  void ResetExecutionErrorStateToCurrent();
+  void UpdateExecutionErrors();
   Eigen::VectorXd GetReferenceJointPosition(int ref_step) const;
   bool LoadPolicy(const std::string& policy_file);
 
@@ -68,6 +76,7 @@ class RlDanceExampleRunner : public MotionRunner {
   std::vector<TrajectoryData> trajectories_;
   std::string active_policy_file_;
   double active_trajectory_speed_scale_ = 1.0;
+  bool active_resident_control_ = true;
   int active_trajectory_index_ = 0;
   int max_policy_step = 0;
   int previous_motion_select_button_ = -1;
@@ -75,6 +84,7 @@ class RlDanceExampleRunner : public MotionRunner {
   bool trajectory_paused_ = false;
   bool waiting_for_motion_select_release_ = false;
   bool motion_selected_since_enter_ = false;
+  int motion_select_auto_start_countdown_ = 0;
   int trajectory_blend_step_ = 0;
   int trajectory_blend_steps_ = 0;
 
@@ -82,6 +92,9 @@ class RlDanceExampleRunner : public MotionRunner {
   std::unique_ptr<math::MNNModel> mlp_net_;
   Eigen::VectorXd mlp_net_observation_vec;
   std::shared_ptr<Eigen::VectorXd> mlp_net_action_;
+  std::shared_ptr<Eigen::VectorXd> exec_error_;
+  std::shared_ptr<Eigen::VectorXd> prev_exec_error_;
+  Eigen::VectorXd last_target_joint_pos_;
   std::vector<Eigen::MatrixXd> observation_history_buffers_;
 
   wbt_obs::ObsContext obs_ctx_;
@@ -96,6 +109,9 @@ class RlDanceExampleRunner : public MotionRunner {
   std::shared_ptr<Eigen::VectorXd> default_joint_q_;
   Eigen::VectorXd q_real_;
   Eigen::VectorXd qd_real_;
+  Eigen::VectorXd hold_joint_q_;
+  Eigen::VectorXd hold_joint_kp_;
+  Eigen::VectorXd hold_joint_kd_;
   Eigen::VectorXd q_des_;
   Eigen::VectorXd qd_des_;
   Eigen::VectorXd tau_ff_des_;

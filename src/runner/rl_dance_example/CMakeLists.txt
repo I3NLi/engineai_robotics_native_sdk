@@ -30,6 +30,13 @@ target_include_directories(${CURRENT_TARGET_NAME}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/cnpy>
 )
 
+if(EXISTS "${CMAKE_SOURCE_DIR}/.conda/include/eigen3")
+  target_include_directories(${CURRENT_TARGET_NAME}
+    SYSTEM BEFORE PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/.conda/include/eigen3>
+  )
+endif()
+
 add_subdirectory(include/cnpy)
 
 # Set link libraries of target
