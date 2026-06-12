@@ -39,28 +39,25 @@ SDK. For T800 delivery validation, use the state macros first:
 | pd_stand | `LB + A` |
 | passive / soft emergency fallback | `LB + RB` |
 | walk | `LB + B` |
-| dance | `RB + B` |
+| walk forward | `LB + B`, then left stick forward for 4 s |
+| dance | `LB + A`, then `RB + B` |
+| dance punch | `LB + A`, then `RB + B`, then `A` |
+| dance punch-fk | `LB + A`, then `RB + B`, then `A + START` |
+| dance kick | `LB + A`, then `RB + B`, then `B` |
+| dance riot | `LB + A`, then `RB + B`, then `X` |
+| dance victory | `LB + A`, then `RB + B`, then `Y` |
 
-The `dance` macro only enters the dance state. The runner holds the current pose
-until a motion below is selected:
+The `dance` macro first enters `pd_stand`, then enters the dance state. Use the
+motion controls below after the robot is already in `dance`:
 
 | Motion | Macro |
 |:-------|:------|
 | Pause Toggle | `BACK` |
 | Punch | `A` |
+| Punch FK | `A + START` |
+| Kick Turn | `B` |
+| Riot Combo | `X` |
 | Victory | `Y` |
-| Kick Turn 0.5x | `B` |
-| Kick Turn 0.6x | `B + D-pad Up` |
-| Kick Turn 0.7x | `B + D-pad Left` |
-| Kick Turn 0.8x | `B + D-pad Right` |
-| Kick Turn 0.9x | `B + D-pad Down` |
-| Kick Turn 1.0x | `B + START` |
-| Riot Combo 0.5x | `X` |
-| Riot Combo 0.6x | `X + D-pad Up` |
-| Riot Combo 0.7x | `X + D-pad Left` |
-| Riot Combo 0.8x | `X + D-pad Right` |
-| Riot Combo 0.9x | `X + D-pad Down` |
-| Riot Combo 1.0x | `X + START` |
 
 ## License
 

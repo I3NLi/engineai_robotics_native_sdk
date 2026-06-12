@@ -1,9 +1,10 @@
 import time
 
 from lcm_msgs.data import GamepadKeys
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor, QKeySequence, QPainter, QShortcut
+from PyQt6.QtCore import QEvent, Qt, QTimer
+from PyQt6.QtGui import QColor, QPainter
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QGridLayout,
     QGroupBox,
@@ -113,53 +114,63 @@ class VirtualGamepadWidget(QWidget):
             'CROSS_Y_RIGHT': Qt.Key.Key_D
         }
         self.stick_shortcuts = {
-            "Left": ("Left Stick Y", -self.STICK_KEYBOARD_STEP),
-            "Right": ("Left Stick Y", self.STICK_KEYBOARD_STEP),
-            "Up": ("Left Stick X", self.STICK_KEYBOARD_STEP),
-            "Down": ("Left Stick X", -self.STICK_KEYBOARD_STEP),
-            "Shift+Left": ("Right Stick Y", -self.STICK_KEYBOARD_STEP),
-            "Shift+Right": ("Right Stick Y", self.STICK_KEYBOARD_STEP),
-            "Shift+Up": ("Right Stick X", self.STICK_KEYBOARD_STEP),
-            "Shift+Down": ("Right Stick X", -self.STICK_KEYBOARD_STEP),
-            "Space": None,
+            (Qt.Key.Key_Left, False): ("Left Stick Y", -self.STICK_KEYBOARD_STEP),
+            (Qt.Key.Key_Right, False): ("Left Stick Y", self.STICK_KEYBOARD_STEP),
+            (Qt.Key.Key_Up, False): ("Left Stick X", self.STICK_KEYBOARD_STEP),
+            (Qt.Key.Key_Down, False): ("Left Stick X", -self.STICK_KEYBOARD_STEP),
+            (Qt.Key.Key_Left, True): ("Right Stick Y", -self.STICK_KEYBOARD_STEP),
+            (Qt.Key.Key_Right, True): ("Right Stick Y", self.STICK_KEYBOARD_STEP),
+            (Qt.Key.Key_Up, True): ("Right Stick X", self.STICK_KEYBOARD_STEP),
+            (Qt.Key.Key_Down, True): ("Right Stick X", -self.STICK_KEYBOARD_STEP),
         }
+
+        enter_dance_sequence = [
+            {"buttons": tuple(), "frames": 3},
+            {"buttons": ("LB", "A"), "frames": 10},
+            {"buttons": tuple(), "frames": 20},
+            {"buttons": ("RB", "B"), "frames": 10},
+            {"buttons": tuple(), "frames": 6},
+        ]
+
+        def enter_dance_then(buttons=tuple()):
+            sequence = list(enter_dance_sequence)
+            if buttons:
+                sequence.extend(
+                    [
+                        {"buttons": buttons, "frames": 12},
+                        {"buttons": tuple(), "frames": 3},
+                    ]
+                )
+            return sequence
 
         # set predefined macro combinations
         self.macros = {
             "pd_stand: [LB, A]": ("LB", "A"),
             "passive: [LB, RB]": ("LB", "RB"),
             "walk: [LB, B]": ("LB", "B"),
-            "dance: [RB, B]": ("RB", "B")
+            "walk forward: [LB, B] + L↑": [
+                {"buttons": tuple(), "frames": 3},
+                {"buttons": ("LB", "B"), "frames": 10},
+                {"buttons": tuple(), "analog": {"Left Stick X": 0.6}, "frames": 80},
+                {"buttons": tuple(), "analog": {"Left Stick X": 0.0}, "frames": 3},
+            ],
+            "dance: [LB,A] -> [RB,B]": enter_dance_then(),
+            "dance punch": enter_dance_then(("A",)),
+            "dance punch-fk": enter_dance_then(("A", "START")),
+            "dance kick": enter_dance_then(("B",)),
+            "dance riot": enter_dance_then(("X",)),
+            "dance victory": enter_dance_then(("Y",)),
         }
         self.motion_switch_groups = (
             (
-                "Controls",
+                "T800 83500 Dance Motions",
                 (
                     ("Pause Toggle", ("BACK",)),
                     ("Punch", ("A",)),
+                    ("Punch FK", ("A", "START")),
+                    ("Kick Turn", ("B",)),
+                    ("Riot Combo", ("X",)),
                     ("Victory", ("Y",)),
-                ),
-            ),
-            (
-                "Kick Turn",
-                (
-                    ("0.5", ("B",)),
-                    ("0.6", ("B", "CROSS_X_UP")),
-                    ("0.7", ("B", "CROSS_Y_LEFT")),
-                    ("0.8", ("B", "CROSS_Y_RIGHT")),
-                    ("0.9", ("B", "CROSS_X_DOWN")),
-                    ("1.0", ("B", "START")),
-                ),
-            ),
-            (
-                "Riot Combo",
-                (
-                    ("0.5", ("X",)),
-                    ("0.6", ("X", "CROSS_X_UP")),
-                    ("0.7", ("X", "CROSS_Y_LEFT")),
-                    ("0.8", ("X", "CROSS_Y_RIGHT")),
-                    ("0.9", ("X", "CROSS_X_DOWN")),
-                    ("1.0", ("X", "START")),
                 ),
             ),
         )
@@ -486,6 +497,11 @@ class VirtualGamepadWidget(QWidget):
         for i in range(len(gamepad_keys.analog_states)):
             gamepad_keys.analog_states[i] = self.gamepad_keys.analog_states[i]
 
+        analog_overrides = {}
+        if isinstance(button_combination, dict):
+            analog_overrides = button_combination.get("analog", {})
+            button_combination = button_combination.get("buttons", tuple())
+
         # Set digital button states.
         for button_name in button_combination:
             if button_name in self.button_map:
@@ -493,33 +509,25 @@ class VirtualGamepadWidget(QWidget):
                 gamepad_keys.digital_states[index] = 1
             else:
                 print(f"Warning: Button {button_name} not found in button_map")
+
+        for analog_name, value in analog_overrides.items():
+            if analog_name in self.analog_map:
+                _, index, _ = self.analog_map[analog_name]
+                gamepad_keys.analog_states[index] = value
+            elif isinstance(analog_name, int) and 0 <= analog_name < len(gamepad_keys.analog_states):
+                gamepad_keys.analog_states[analog_name] = value
+            else:
+                print(f"Warning: Analog {analog_name} not found in analog_map")
         return gamepad_keys
 
     def setup_shortcuts(self):
         self.shortcut_states = {name: False for name in self.shortcuts}
-
-        for button_name, key in self.shortcuts.items():
-            shortcut = QShortcut(QKeySequence(key), self)
-            shortcut.activated.connect(
-                lambda n=button_name: self.handle_shortcut_pressed(n))
-            shortcut.activatedAmbiguously.connect(
-                lambda n=button_name: self.handle_shortcut_pressed(n))
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
 
     def setup_stick_shortcuts(self):
-        self.analog_shortcuts = []
-
-        for sequence, target in self.stick_shortcuts.items():
-            shortcut = QShortcut(QKeySequence(sequence), self)
-            shortcut.setAutoRepeat(True)
-            if target is None:
-                shortcut.activated.connect(self.reset_stick_values)
-            else:
-                analog_name, delta = target
-                shortcut.activated.connect(
-                    lambda name=analog_name, step=delta: self.adjust_stick_value(
-                        name, step)
-                )
-            self.analog_shortcuts.append(shortcut)
+        self.active_stick_keys = {}
 
     def setup_sliders(self):
         for name, (slider, analog_id, label) in self.analog_map.items():
@@ -532,7 +540,7 @@ class VirtualGamepadWidget(QWidget):
     def adjust_stick_value(self, analog_name, delta):
         slider, _, _ = self.analog_map[analog_name]
         next_value = max(slider.minimum(),
-                         min(slider.maximum(), slider.value() + delta))
+                         min(slider.maximum(), delta * 10))
         slider.setValue(next_value)
 
     def reset_stick_values(self):
@@ -557,19 +565,58 @@ class VirtualGamepadWidget(QWidget):
         for slider, _, _ in self.analog_map.values():
             slider.setValue(0)
 
-    def keyPressEvent(self, event):
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            return self.handle_keyboard_event(event, True)
+        if event.type() == QEvent.Type.KeyRelease:
+            return self.handle_keyboard_event(event, False)
+        return super().eventFilter(obj, event)
+
+    def handle_keyboard_event(self, event, pressed):
+        if event.isAutoRepeat():
+            return True
+
         reverse_shortcuts = {v: k for k, v in self.shortcuts.items()}
         if event.key() in reverse_shortcuts:
             button_name = reverse_shortcuts[event.key()]
-            self.handle_shortcut_pressed(button_name)
-        super().keyPressEvent(event)
+            if pressed:
+                self.handle_shortcut_pressed(button_name)
+            else:
+                self.handle_shortcut_released(button_name)
+            return True
+
+        if event.key() == Qt.Key.Key_Space:
+            if pressed:
+                self.reset_stick_values()
+            return True
+
+        shift_pressed = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        stick_target = self.stick_shortcuts.get((event.key(), shift_pressed))
+        if stick_target:
+            analog_name, delta = stick_target
+            if pressed:
+                self.active_stick_keys[event.key(), shift_pressed] = analog_name
+                self.adjust_stick_value(analog_name, delta)
+            else:
+                self.active_stick_keys.pop((event.key(), shift_pressed), None)
+                self.reset_stick_axis_if_released(analog_name)
+            return True
+
+        return False
+
+    def reset_stick_axis_if_released(self, analog_name):
+        if analog_name in self.active_stick_keys.values():
+            return
+        slider, _, _ = self.analog_map[analog_name]
+        slider.setValue(0)
+
+    def keyPressEvent(self, event):
+        if not self.handle_keyboard_event(event, True):
+            super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
-        reverse_shortcuts = {v: k for k, v in self.shortcuts.items()}
-        if event.key() in reverse_shortcuts:
-            button_name = reverse_shortcuts[event.key()]
-            self.handle_shortcut_released(button_name)
-        super().keyReleaseEvent(event)
+        if not self.handle_keyboard_event(event, False):
+            super().keyReleaseEvent(event)
 
     def handle_shortcut_pressed(self, button_name):
         if not self.shortcut_states.get(button_name, False):
@@ -589,6 +636,12 @@ class VirtualGamepadWidget(QWidget):
 
     def handle_macro_button_pressed(self, clicked, macro_button: MacroButton):
         if not self.is_sending:
+            return
+        if isinstance(macro_button.button_combination, list):
+            self.should_send_macro_count = 0
+            self.motion_switch_pulse_queue = []
+            for frame in macro_button.button_combination:
+                self.motion_switch_pulse_queue.extend([frame] * frame.get("frames", 1))
             return
         MACRO_BUTTON_SENDING_COUNT = 10
         self.should_send_macro_count = MACRO_BUTTON_SENDING_COUNT
@@ -644,6 +697,9 @@ class VirtualGamepadWidget(QWidget):
             self.status_light.set_blink_color(QColor("orange"))
 
     def closeEvent(self, event):
+        app = QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(self)
         LcmManager().remove_connection_listener(self.on_lcm_status_changed)
         super().closeEvent(event)
 
